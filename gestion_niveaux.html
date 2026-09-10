@@ -1,0 +1,44 @@
+{% extends "_base.html" %}
+{% block titre %}Gestion des niveaux{% endblock %}
+{% block contenu %}
+<a href="{{ url_for('admin_dashboard') }}" class="lien-retour">&larr; Retour au tableau de bord</a>
+
+<h1>Niveaux de fidélité</h1>
+
+<section class="carte-formulaire">
+    <h2>Ajouter un niveau</h2>
+    <form method="POST" action="{{ url_for('ajouter_niveau') }}" class="formulaire-niveau">
+        <input type="text" name="nom_niveau" placeholder="Nom du niveau" required>
+        <input type="number" name="nombre_achats_requis" placeholder="Achats requis" min="0" required>
+        <input type="text" name="icone" placeholder="Icône (emoji)" maxlength="4" value="🏆">
+        <input type="color" name="couleur" value="#D4AF37">
+        <textarea name="avantages" placeholder="Avantages liés à ce niveau" rows="2"></textarea>
+        <button type="submit" class="bouton bouton-principal">+ Ajouter</button>
+    </form>
+</section>
+
+<section class="liste-niveaux">
+    {% for niveau in niveaux %}
+    <form method="POST" action="{{ url_for('modifier_niveau', niveau_id=niveau.id) }}" class="carte-niveau" style="border-color: {{ niveau.couleur }};">
+        <div class="carte-niveau-entete">
+            <input type="text" name="icone" value="{{ niveau.icone }}" maxlength="4" class="champ-icone">
+            <input type="text" name="nom_niveau" value="{{ niveau.nom_niveau }}" class="champ-nom">
+        </div>
+        <label>Achats requis</label>
+        <input type="number" name="nombre_achats_requis" value="{{ niveau.nombre_achats_requis }}" min="0">
+        <label>Avantages</label>
+        <textarea name="avantages" rows="2">{{ niveau.avantages }}</textarea>
+        <label>Couleur</label>
+        <input type="color" name="couleur" value="{{ niveau.couleur }}">
+        <label class="case-actif">
+            <input type="checkbox" name="actif" {% if niveau.actif %}checked{% endif %}>
+            Niveau actif
+        </label>
+        <div class="carte-niveau-actions">
+            <button type="submit" class="bouton bouton-secondaire bouton-mini">Enregistrer</button>
+            <button type="submit" formaction="{{ url_for('supprimer_niveau', niveau_id=niveau.id) }}" class="bouton bouton-danger bouton-mini" data-confirmation="Supprimer le niveau {{ niveau.nom_niveau }} ?">Supprimer</button>
+        </div>
+    </form>
+    {% endfor %}
+</section>
+{% endblock %}
