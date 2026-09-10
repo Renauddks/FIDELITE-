@@ -1,1 +1,20 @@
-
+{% extends "_base.html" %}
+{% block titre %}Accueil{% endblock %}
+{% block contenu %}
+<section class="carte-presentation">
+    <h1>Bienvenue sur FIDÉLITÉ+</h1>
+    <p class="texte-intro">
+        Le programme de fidélité de <strong>Sandwich du Roi</strong>.
+        Chaque achat vous rapproche d'avantages exclusifs : réductions,
+        sandwichs offerts, livraison gratuite et bien plus.
+    </p>
+    <p>
+        Si vous êtes déjà client, vous avez reçu un lien personnel par
+        WhatsApp, SMS ou email : ouvrez-le pour consulter votre carte de
+        fidélité en temps réel.
+    </p>
+    <div class="bloc-action">
+        <a href="{{ url_for('admin_login') }}" class="bouton bouton-secondaire">Espace administrateur</a>
+    </div>
+</section>
+{% endblock %}

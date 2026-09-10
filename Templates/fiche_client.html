@@ -1,0 +1,87 @@
+{% extends "_base.html" %}
+{% block titre %}Fiche de {{ client.prenom }} {{ client.nom }}{% endblock %}
+{% block contenu %}
+<a href="{{ url_for('admin_dashboard') }}" class="lien-retour">&larr; Retour au tableau de bord</a>
+
+<section class="carte-fiche">
+    <h1>{{ client.prenom }} {{ client.nom }}</h1>
+    <p class="fiche-meta">📱 {{ client.numero or '—' }} · 🎂 {{ client.age or '—' }} ans</p>
+    <p class="fiche-meta">
+        Lien individuel :
+        <code>/carte/{{ client.lien_unique }}</code>
+        <button type="button" class="bouton-lien" data-lien="{{ url_for('carte_client', lien_unique=client.lien_unique, _external=True) }}">📋 Copier le lien complet</button>
+    </p>
+
+    <div class="fiche-stats">
+        <div class="fiche-stat"><span class="fiche-stat-valeur">{{ client.statut_actuel }}</span><span>Statut</span></div>
+        <div class="fiche-stat"><span class="fiche-stat-valeur">{{ client.nombre_achats }}</span><span>Achats</span></div>
+        <div class="fiche-stat"><span class="fiche-stat-valeur">{{ client.score_points }}</span><span>Points</span></div>
+    </div>
+</section>
+
+<div class="grille-actions">
+    <section class="carte-formulaire">
+        <h2>Enregistrer un achat</h2>
+        <form method="POST" action="{{ url_for('ajouter_achat', client_id=client.id) }}">
+            <label>Montant (FCFA)</label>
+            <input type="number" step="0.01" name="montant" placeholder="0">
+            <label>Points à ajouter</label>
+            <input type="number" name="points_ajoutes" placeholder="0">
+            <label>Note (optionnel)</label>
+            <input type="text" name="note" placeholder="Ex : sandwich viennois moyen">
+            <button type="submit" class="bouton bouton-principal">+ Ajouter l'achat (case suivante cochée)</button>
+        </form>
+    </section>
+
+    <section class="carte-formulaire">
+        <h2>Ajuster le score de points</h2>
+        <form method="POST" action="{{ url_for('modifier_points', client_id=client.id) }}" class="formulaire-ligne">
+            <select name="action">
+                <option value="ajouter">Ajouter</option>
+                <option value="retirer">Retirer</option>
+                <option value="definir">Définir à</option>
+            </select>
+            <input type="number" name="valeur" placeholder="Valeur" required>
+            <button type="submit" class="bouton bouton-secondaire">Appliquer</button>
+        </form>
+    </section>
+
+    <section class="carte-formulaire">
+        <h2>Corriger le nombre d'achats</h2>
+        <form method="POST" action="{{ url_for('modifier_achats', client_id=client.id) }}" class="formulaire-ligne">
+            <input type="number" name="nombre_achats" value="{{ client.nombre_achats }}" min="0" required>
+            <button type="submit" class="bouton bouton-secondaire">Corriger</button>
+        </form>
+        <p class="texte-aide">Utile uniquement en cas d'erreur de saisie — préférez "Enregistrer un achat" au quotidien.</p>
+    </section>
+
+    <section class="carte-formulaire carte-formulaire-danger">
+        <h2>Réinitialiser la carte</h2>
+        <p class="texte-aide">Remet les achats et les points à zéro. Action irréversible.</p>
+        <form method="POST" action="{{ url_for('reinitialiser_client', client_id=client.id) }}" data-confirmation="Réinitialiser la carte de {{ client.prenom }} {{ client.nom }} ? Cette action est irréversible.">
+            <button type="submit" class="bouton bouton-danger">Réinitialiser</button>
+        </form>
+    </section>
+</div>
+
+<section>
+    <h2>Historique des achats</h2>
+    <div class="tableau-scroll">
+        <table class="tableau-clients">
+            <thead><tr><th>Date</th><th>Montant</th><th>Points</th><th>Note</th></tr></thead>
+            <tbody>
+                {% for achat in historique %}
+                <tr>
+                    <td>{{ achat.date_achat }}</td>
+                    <td>{{ achat.montant }} FCFA</td>
+                    <td>+{{ achat.points_ajoutes }}</td>
+                    <td>{{ achat.note or '—' }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4" class="ligne-vide">Aucun achat enregistré.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}
