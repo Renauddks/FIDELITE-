@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block titre %}FIDÉLITÉ+{% endblock %} — Sandwich du Roi</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <header class="entete">
+        <div class="entete-contenu">
+            <span class="entete-logo">👑</span>
+            <span class="entete-titre">FIDÉLITÉ<span class="plus">+</span></span>
+            <span class="entete-sous-titre">Sandwich du Roi</span>
+        </div>
+    </header>
+
+    <main class="conteneur">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="messages-flash">
+                    {% for categorie, message in messages %}
+                        <div class="flash flash-{{ categorie }}">{{ message }}</div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        {% block contenu %}{% endblock %}
+    </main>
+
+    <footer class="pied-page">
+        <p>Sandwich du Roi — Programme FIDÉLITÉ+</p>
+    </footer>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+    {% block script_page %}{% endblock %}
+</body>
+</html>

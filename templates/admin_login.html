@@ -1,0 +1,12 @@
+{% extends "_base.html" %}
+{% block titre %}Connexion admin{% endblock %}
+{% block contenu %}
+<section class="carte-formulaire carte-formulaire-etroite">
+    <h1>Espace administrateur</h1>
+    <form method="POST" action="{{ url_for('admin_login') }}">
+        <label for="mot_de_passe">Mot de passe</label>
+        <input type="password" id="mot_de_passe" name="mot_de_passe" required autofocus>
+        <button type="submit" class="bouton bouton-principal">Se connecter</button>
+    </form>
+</section>
+{% endblock %}
