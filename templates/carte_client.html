@@ -1,5 +1,7 @@
 {% extends "_base.html" %}
 {% block titre %}Carte de {{ client.prenom }}{% endblock %}
+{% block og_titre %}🏆 La carte FIDÉLITÉ+ de {{ client.prenom }} {{ client.nom }}{% endblock %}
+{% block og_description %}{{ client.statut_actuel }} · {{ client.nombre_achats }} achat{{ 's' if client.nombre_achats != 1 else '' }} · Sandwich du Roi{% endblock %}
 {% block contenu %}
 <div class="carte-fidelite">
 
