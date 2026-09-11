@@ -1,110 +1,21 @@
 {% extends "_base.html" %}
-{% block titre %}Carte de {{ client.prenom }}{% endblock %}
-{% block og_titre %}🏆 La carte FIDÉLITÉ+ de {{ client.prenom }} {{ client.nom }}{% endblock %}
-{% block og_description %}{{ client.statut_actuel }} · {{ client.nombre_achats }} achat{{ 's' if client.nombre_achats != 1 else '' }} · Sandwich du Roi{% endblock %}
+{% block titre %}Accueil{% endblock %}
 {% block contenu %}
-<div class="carte-fidelite">
-
-    <div class="carte-fidelite-haut">
-        <div class="bloc-client">
-            <div class="photo-client">
-                {% if client.photo %}
-                    <img src="{{ url_for('static', filename=client.photo) }}" alt="Photo de {{ client.prenom }}">
-                {% else %}
-                    <span class="photo-client-vide">👤</span>
-                {% endif %}
-            </div>
-            <div class="infos-client">
-                <p class="nom-client">{{ client.prenom }} {{ client.nom }}</p>
-                <p class="detail-client">📱 {{ client.numero or 'Non renseigné' }}</p>
-                <p class="detail-client">🎂 {{ client.age or '—' }} ans</p>
-                <button type="button" class="bouton bouton-mini bouton-texte" onclick="document.getElementById('modale-modifier').classList.add('modale-visible')">
-                    ✏️ Modifier mes infos
-                </button>
-            </div>
-        </div>
-
-        <div class="bloc-statut">
-            <div class="cercle-clignotant">
-                <span class="cercle-valeur">{{ client.score_points }}</span>
-                <span class="cercle-libelle">points</span>
-            </div>
-            <p class="detail-statut">🛒 {{ client.nombre_achats }} achat{{ 's' if client.nombre_achats != 1 else '' }}</p>
-            <p class="detail-statut statut-actuel">🏆 {{ client.statut_actuel }}</p>
-        </div>
+<section class="carte-presentation carte-presentation-accueil">
+    <img src="{{ url_for('static', filename='images/logo-complet.png') }}" alt="Sandwich du Roi — Venez à la découverte de nouvelles saveurs !!!" class="logo-accueil">
+    <h1>Bienvenue sur FIDÉLITÉ+</h1>
+    <p class="texte-intro">
+        Le programme de fidélité de <strong>Sandwich du Roi</strong>.
+        Chaque achat vous rapproche d'avantages exclusifs : réductions,
+        sandwichs offerts, livraison gratuite et bien plus.
+    </p>
+    <p>
+        Si vous êtes déjà client, vous avez reçu un lien personnel par
+        WhatsApp, SMS ou email : ouvrez-le pour consulter votre carte de
+        fidélité en temps réel.
+    </p>
+    <div class="bloc-action">
+        <a href="{{ url_for('admin_login') }}" class="bouton bouton-secondaire">Espace administrateur</a>
     </div>
-
-    <div class="carte-fidelite-progression">
-        <p class="titre-section">Progression</p>
-        <div class="grille-cases">
-            {% for i in range(1, nb_cases_total + 1) %}
-                <span class="case-achat {% if i <= cases_cochees %}case-cochee{% endif %}">
-                    {% if i <= cases_cochees %}✔{% endif %}
-                </span>
-            {% endfor %}
-        </div>
-    </div>
-
-    <div class="carte-fidelite-message">
-        {% if prochain_niveau %}
-            💬 Encore <strong>{{ achats_manquants }}</strong> achat{{ 's' if achats_manquants != 1 else '' }} pour être <strong>{{ prochain_niveau }}</strong>
-        {% else %}
-            💬 Vous avez atteint le niveau maximum. Merci pour votre fidélité !
-        {% endif %}
-    </div>
-
-    <div class="carte-fidelite-niveaux">
-        <p class="titre-section">Niveaux &amp; avantages</p>
-        <div class="liste-badges-niveaux">
-            {% for niveau in niveaux %}
-                <button type="button"
-                        class="badge-niveau {% if client.nombre_achats >= niveau.nombre_achats_requis %}badge-niveau-atteint{% endif %}"
-                        style="border-color: {{ niveau.couleur }};"
-                        onclick="ouvrirNiveau('{{ niveau.icone }} {{ niveau.nom_niveau|e }}', '{{ (niveau.avantages or 'Aucun avantage renseigné pour ce niveau.')|e }}')">
-                    {{ niveau.icone }} {{ niveau.nom_niveau }}
-                </button>
-            {% endfor %}
-        </div>
-    </div>
-</div>
-
-<!-- Modale : avantages d'un niveau -->
-<div id="modale-niveau" class="modale">
-    <div class="modale-contenu">
-        <button type="button" class="modale-fermer" onclick="document.getElementById('modale-niveau').classList.remove('modale-visible')">×</button>
-        <h3 id="modale-niveau-titre"></h3>
-        <p id="modale-niveau-avantages"></p>
-    </div>
-</div>
-
-<!-- Modale : modifier mes informations -->
-<div id="modale-modifier" class="modale">
-    <div class="modale-contenu">
-        <button type="button" class="modale-fermer" onclick="document.getElementById('modale-modifier').classList.remove('modale-visible')">×</button>
-        <h3>Modifier mes informations</h3>
-        <form method="POST" action="{{ url_for('modifier_infos', lien_unique=client.lien_unique) }}" enctype="multipart/form-data">
-            <label>Photo</label>
-            <input type="file" name="photo" accept="image/*">
-            <label>Nom</label>
-            <input type="text" name="nom" value="{{ client.nom }}" required>
-            <label>Prénom</label>
-            <input type="text" name="prenom" value="{{ client.prenom }}" required>
-            <label>Numéro</label>
-            <input type="text" name="numero" value="{{ client.numero or '' }}">
-            <label>Âge</label>
-            <input type="number" name="age" value="{{ client.age or '' }}" min="0" max="120">
-            <button type="submit" class="bouton bouton-principal">Enregistrer</button>
-        </form>
-    </div>
-</div>
-{% endblock %}
-
-{% block script_page %}
-<script>
-function ouvrirNiveau(titre, avantages) {
-    document.getElementById('modale-niveau-titre').textContent = titre;
-    document.getElementById('modale-niveau-avantages').textContent = avantages;
-    document.getElementById('modale-niveau').classList.add('modale-visible');
-}
-</script>
+</section>
 {% endblock %}
