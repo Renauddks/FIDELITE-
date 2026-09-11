@@ -168,14 +168,14 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
 .carte-fidelite-haut {
     display: flex;
     justify-content: space-between;
-    gap: 14px;
+    align-items: flex-start;
+    gap: 10px;
     padding: 20px;
-    flex-wrap: wrap;
     background: linear-gradient(180deg, #fffdf6, var(--blanc));
 }
-.bloc-client { display: flex; gap: 12px; align-items: flex-start; }
+.bloc-client { display: flex; gap: 10px; align-items: flex-start; min-width: 0; flex: 1; }
 .photo-client {
-    width: 64px; height: 64px;
+    width: 56px; height: 56px;
     border-radius: 50%;
     background: var(--gris-clair);
     display: flex; align-items: center; justify-content: center;
@@ -184,13 +184,14 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
     flex-shrink: 0;
 }
 .photo-client img { width: 100%; height: 100%; object-fit: cover; }
-.photo-client-vide { font-size: 1.8rem; color: #bbb; }
-.nom-client { font-weight: 700; font-size: 1.05rem; margin: 0 0 2px; }
-.detail-client { font-size: 0.82rem; color: #777; margin: 2px 0; }
+.photo-client-vide { font-size: 1.6rem; color: #bbb; }
+.infos-client { min-width: 0; }
+.nom-client { font-weight: 700; font-size: 0.95rem; margin: 0 0 2px; overflow-wrap: break-word; }
+.detail-client { font-size: 0.76rem; color: #777; margin: 2px 0; overflow-wrap: break-word; }
 
-.bloc-statut { text-align: center; min-width: 110px; }
+.bloc-statut { text-align: center; flex-shrink: 0; width: 92px; }
 .cercle-clignotant {
-    width: 78px; height: 78px;
+    width: 64px; height: 64px;
     border-radius: 50%;
     background: var(--vert);
     color: var(--blanc);
@@ -199,14 +200,14 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
     animation: pulsation 1.8s ease-in-out infinite;
     box-shadow: 0 0 0 rgba(50, 205, 50, 0.5);
 }
-.cercle-valeur { font-size: 1.3rem; font-weight: 800; line-height: 1; }
-.cercle-libelle { font-size: 0.65rem; text-transform: uppercase; }
+.cercle-valeur { font-size: 1.1rem; font-weight: 800; line-height: 1; }
+.cercle-libelle { font-size: 0.58rem; text-transform: uppercase; }
 @keyframes pulsation {
     0%   { box-shadow: 0 0 0 0 rgba(50, 205, 50, 0.55); }
-    70%  { box-shadow: 0 0 0 12px rgba(50, 205, 50, 0); }
+    70%  { box-shadow: 0 0 0 10px rgba(50, 205, 50, 0); }
     100% { box-shadow: 0 0 0 0 rgba(50, 205, 50, 0); }
 }
-.detail-statut { font-size: 0.82rem; margin: 3px 0; color: #666; }
+.detail-statut { font-size: 0.72rem; margin: 3px 0; color: #666; overflow-wrap: break-word; }
 .statut-actuel { color: var(--bordeaux); font-weight: 700; }
 
 .titre-section {
@@ -248,19 +249,21 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
 
 .carte-fidelite-niveaux { padding: 16px 0 20px; }
 .liste-badges-niveaux {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 8px;
     padding: 0 20px;
 }
 .badge-niveau {
     background: var(--blanc);
     border: 2px solid #ddd;
-    border-radius: 20px;
-    padding: 8px 14px;
-    font-size: 0.82rem;
+    border-radius: 12px;
+    padding: 10px 8px;
+    font-size: 0.8rem;
     cursor: pointer;
     color: var(--gris-texte);
+    text-align: center;
+    overflow-wrap: break-word;
 }
 .badge-niveau-atteint {
     background: var(--or-clair);
@@ -294,4 +297,4 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
     font-size: 1.4rem;
     cursor: pointer;
     color: #999;
-      }
+}
