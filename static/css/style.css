@@ -32,7 +32,7 @@ body {
     align-items: baseline;
     gap: 10px;
 }
-.entete-logo { font-size: 1.6rem; }
+.entete-logo-img { height: 36px; width: auto; flex-shrink: 0; }
 .entete-titre {
     font-size: 1.5rem;
     font-weight: 700;
@@ -124,6 +124,8 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
 }
 .carte-formulaire-etroite { max-width: 360px; margin: 40px auto; }
 .carte-formulaire-danger { border: 1px solid #f3c9c3; }
+.carte-presentation-accueil { text-align: center; }
+.logo-accueil { max-width: 280px; width: 100%; height: auto; margin-bottom: 10px; }
 .texte-intro { font-size: 1.05rem; line-height: 1.5; }
 .texte-aide { font-size: 0.8rem; color: #888; margin-top: 6px; }
 .bloc-action { margin-top: 18px; }
@@ -297,4 +299,4 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
     font-size: 1.4rem;
     cursor: pointer;
     color: #999;
-}
+    }
