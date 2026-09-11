@@ -44,6 +44,9 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("FLASK_SECRET_KEY_FIDELITE", secrets.token_hex(32))
 app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
 
+# Git ne conserve pas les dossiers vides : on le recrée nous-mêmes si absent
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+
 COULEUR_OR = "#D4AF37"
 COULEUR_BORDEAUX = "#8B0000"
 COULEUR_VERT = "#32CD32"
@@ -596,15 +599,4 @@ def supprimer_niveau(niveau_id):
     return redirect(url_for("gestion_niveaux"))
 
 
-# ----------------------------------------------------------------------
-# POINT D'ENTRÉE
-# ----------------------------------------------------------------------
-
-if __name__ == "__main__":
-    init_db_if_needed()
-    port = int(os.environ.get("PORT", 5000))
-    debug_mode = os.environ.get("FLASK_DEBUG", "true").lower() == "true"
-    app.run(host="0.0.0.0", port=port, debug=debug_mode)
-else:
-    # Cas d'un déploiement via serveur WSGI (ex. Render / gunicorn)
-    init_db_if_needed()
+# ----------------
