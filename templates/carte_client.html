@@ -5,33 +5,34 @@
 {% block contenu %}
 <div class="carte-fidelite">
 
-    <div class="carte-fidelite-haut">
-        <div class="bloc-client">
-            <div class="photo-client">
-                {% if client.photo %}
-                    <img src="{{ url_for('static', filename=client.photo) }}" alt="Photo de {{ client.prenom }}">
-                {% else %}
-                    <span class="photo-client-vide">👤</span>
-                {% endif %}
+    <div class="carte-fidelite-hero">
+        <div class="hero-photo">
+            {% if client.photo %}
+                <img src="{{ url_for('static', filename=client.photo) }}" alt="Photo de {{ client.prenom }}">
+            {% else %}
+                <span class="hero-photo-vide">👤</span>
+            {% endif %}
+        </div>
+        <p class="hero-nom">{{ client.prenom }} {{ client.nom }}</p>
+        <p class="hero-contact">📱 {{ client.numero or 'Non renseigné' }} &nbsp;·&nbsp; 🎂 {{ client.age or '—' }} ans</p>
+        <span class="hero-statut">🏆 {{ client.statut_actuel }}</span>
+
+        <div class="hero-stats">
+            <div class="hero-stat-points">
+                <div class="cercle-clignotant">
+                    <span class="cercle-valeur">{{ client.score_points }}</span>
+                    <span class="cercle-libelle">points</span>
+                </div>
             </div>
-            <div class="infos-client">
-                <p class="nom-client">{{ client.prenom }} {{ client.nom }}</p>
-                <p class="detail-client">📱 {{ client.numero or 'Non renseigné' }}</p>
-                <p class="detail-client">🎂 {{ client.age or '—' }} ans</p>
-                <button type="button" class="bouton bouton-mini bouton-texte" onclick="document.getElementById('modale-modifier').classList.add('modale-visible')">
-                    ✏️ Modifier mes infos
-                </button>
+            <div class="hero-stat-achats">
+                <span class="hero-stat-achats-valeur">🛒 {{ client.nombre_achats }}</span>
+                <span class="hero-stat-achats-label">achat{{ 's' if client.nombre_achats != 1 else '' }}</span>
             </div>
         </div>
 
-        <div class="bloc-statut">
-            <div class="cercle-clignotant">
-                <span class="cercle-valeur">{{ client.score_points }}</span>
-                <span class="cercle-libelle">points</span>
-            </div>
-            <p class="detail-statut">🛒 {{ client.nombre_achats }} achat{{ 's' if client.nombre_achats != 1 else '' }}</p>
-            <p class="detail-statut statut-actuel">🏆 {{ client.statut_actuel }}</p>
-        </div>
+        <button type="button" class="bouton bouton-mini bouton-clair" onclick="document.getElementById('modale-modifier').classList.add('modale-visible')">
+            ✏️ Modifier mes infos
+        </button>
     </div>
 
     <div class="carte-fidelite-progression">
@@ -43,14 +44,23 @@
                 </span>
             {% endfor %}
         </div>
-    </div>
 
-    <div class="carte-fidelite-message">
-        {% if prochain_niveau %}
-            💬 Encore <strong>{{ achats_manquants }}</strong> achat{{ 's' if achats_manquants != 1 else '' }} pour être <strong>{{ prochain_niveau }}</strong>
-        {% else %}
-            💬 Vous avez atteint le niveau maximum. Merci pour votre fidélité !
-        {% endif %}
+        <div class="bloc-barre-progression">
+            <div class="barre-progression-info">
+                <span>{{ progression.niveau_actuel.nom_niveau if progression.niveau_actuel else 'Nouveau Client' }}</span>
+                <span>{{ progression.niveau_suivant.nom_niveau if progression.niveau_suivant else 'Niveau max' }}</span>
+            </div>
+            <div class="barre-progression">
+                <div class="barre-progression-remplissage" style="width: {{ progression.pourcentage }}%;"></div>
+            </div>
+            <p class="barre-progression-message">
+                {% if progression.niveau_suivant %}
+                    <strong>{{ progression.pourcentage }}%</strong> — encore <strong>{{ progression.achats_manquants }}</strong> achat{{ 's' if progression.achats_manquants != 1 else '' }} pour <strong>{{ progression.niveau_suivant.nom_niveau }}</strong>
+                {% else %}
+                    🎉 Niveau maximum atteint — merci pour votre fidélité !
+                {% endif %}
+            </p>
+        </div>
     </div>
 
     <div class="carte-fidelite-niveaux">
@@ -61,10 +71,33 @@
                         class="badge-niveau {% if client.nombre_achats >= niveau.nombre_achats_requis %}badge-niveau-atteint{% endif %}"
                         style="border-color: {{ niveau.couleur }};"
                         onclick="ouvrirNiveau('{{ niveau.icone }} {{ niveau.nom_niveau|e }}', '{{ (niveau.avantages or 'Aucun avantage renseigné pour ce niveau.')|e }}')">
-                    {{ niveau.icone }} {{ niveau.nom_niveau }}
+                    {{ niveau.icone }} {{ niveau.nom_niveau }}{% if niveau.seuil_partage_points is not none %} 🎁{% endif %}
                 </button>
             {% endfor %}
         </div>
+    </div>
+
+    <div class="carte-fidelite-partage {% if not peut_partager %}partage-verrouille{% endif %}">
+        <p class="titre-section">🎁 Partager mes points</p>
+        {% if peut_partager %}
+            <form method="POST" action="{{ url_for('partager_points', lien_unique=client.lien_unique) }}" class="formulaire-partage">
+                <label>Numéro du client bénéficiaire</label>
+                <input type="text" name="numero_destinataire" placeholder="Ex : 22961000000" required>
+                <label>Points à partager (solde actuel : {{ client.score_points }})</label>
+                <input type="number" name="points" min="1" max="{{ client.score_points }}" required>
+                <p class="texte-aide">⚠️ Vérifiez bien le numéro avant de valider — le transfert est immédiat et ne peut pas être annulé.</p>
+                <button type="submit" class="bouton bouton-secondaire">Partager mes points</button>
+            </form>
+        {% else %}
+            <p class="texte-verrouille">
+                {% if progression.niveau_actuel and progression.niveau_actuel.seuil_partage_points is not none %}
+                    🔒 Il vous faut au moins <strong>{{ progression.niveau_actuel.seuil_partage_points }} points</strong> à votre niveau actuel (<strong>{{ progression.niveau_actuel.nom_niveau }}</strong>) pour partager.
+                    Il vous manque <strong>{{ progression.niveau_actuel.seuil_partage_points - client.score_points }}</strong> point{{ 's' if (progression.niveau_actuel.seuil_partage_points - client.score_points) != 1 else '' }}.
+                {% else %}
+                    🔒 Le partage de points n'est pas encore disponible à votre niveau (<strong>{{ client.statut_actuel }}</strong>). Continuez vos achats pour le débloquer !
+                {% endif %}
+            </p>
+        {% endif %}
     </div>
 </div>
 

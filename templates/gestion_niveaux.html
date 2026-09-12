@@ -13,6 +13,8 @@
         <input type="text" name="icone" placeholder="Icône (emoji)" maxlength="4" value="🏆">
         <input type="color" name="couleur" value="#D4AF37">
         <textarea name="avantages" placeholder="Avantages liés à ce niveau" rows="2"></textarea>
+        <label>🎁 Seuil de points pour partager à ce niveau (vide = désactivé)</label>
+        <input type="number" name="seuil_partage_points" placeholder="Ex : 50" min="0">
         <button type="submit" class="bouton bouton-principal">+ Ajouter</button>
     </form>
 </section>
@@ -34,6 +36,8 @@
             <input type="checkbox" name="actif" {% if niveau.actif %}checked{% endif %}>
             Niveau actif
         </label>
+        <label>🎁 Seuil de points pour partager (vide = désactivé)</label>
+        <input type="number" name="seuil_partage_points" value="{{ niveau.seuil_partage_points if niveau.seuil_partage_points is not none else '' }}" placeholder="Ex : 50" min="0">
         <div class="carte-niveau-actions">
             <button type="submit" class="bouton bouton-secondaire bouton-mini">Enregistrer</button>
             <button type="submit" formaction="{{ url_for('supprimer_niveau', niveau_id=niveau.id) }}" class="bouton bouton-danger bouton-mini" data-confirmation="Supprimer le niveau {{ niveau.nom_niveau }} ?">Supprimer</button>
