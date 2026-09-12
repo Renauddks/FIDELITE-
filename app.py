@@ -134,6 +134,66 @@ def calculer_prochain_niveau(db, nombre_achats):
     return None, 0
 
 
+def get_niveau_actuel_row(db, nombre_achats):
+    """Renvoie la ligne complète (avec seuil, couleur...) du niveau actuellement atteint."""
+    niveaux = get_niveaux_actifs(db)
+    actuel = niveaux[0] if niveaux else None
+    for niveau in niveaux:
+        if nombre_achats >= niveau["nombre_achats_requis"]:
+            actuel = niveau
+        else:
+            break
+    return actuel
+
+
+def get_prochain_niveau_row(db, nombre_achats):
+    """Renvoie la ligne complète du prochain niveau à atteindre, ou None si niveau max."""
+    niveaux = get_niveaux_actifs(db)
+    for niveau in niveaux:
+        if nombre_achats < niveau["nombre_achats_requis"]:
+            return niveau
+    return None
+
+
+def calculer_progression(db, nombre_achats):
+    """Calcule le pourcentage de progression vers le prochain niveau (pour la barre visuelle)."""
+    niveau_actuel = get_niveau_actuel_row(db, nombre_achats)
+    niveau_suivant = get_prochain_niveau_row(db, nombre_achats)
+
+    if niveau_suivant is None:
+        return {
+            "pourcentage": 100,
+            "achats_manquants": 0,
+            "niveau_actuel": niveau_actuel,
+            "niveau_suivant": None,
+        }
+
+    borne_basse = niveau_actuel["nombre_achats_requis"] if niveau_actuel else 0
+    borne_haute = niveau_suivant["nombre_achats_requis"]
+    portee = max(1, borne_haute - borne_basse)
+    pourcentage = int(min(100, max(0, (nombre_achats - borne_basse) / portee * 100)))
+
+    return {
+        "pourcentage": pourcentage,
+        "achats_manquants": borne_haute - nombre_achats,
+        "niveau_actuel": niveau_actuel,
+        "niveau_suivant": niveau_suivant,
+    }
+
+
+def get_niveau_partage(db):
+    """Compatibilité : conservé pour d'éventuels appels externes (non utilisé en interne désormais)."""
+    return None
+
+
+def client_peut_partager(db, client):
+    """Un client peut partager s'il a assez de points selon le seuil de SON niveau actuel."""
+    niveau_actuel = get_niveau_actuel_row(db, client["nombre_achats"])
+    if niveau_actuel is None or niveau_actuel["seuil_partage_points"] is None:
+        return False
+    return client["score_points"] >= niveau_actuel["seuil_partage_points"]
+
+
 def maj_statut_client(db, client_id):
     """Recalcule et enregistre le statut d'un client à partir de son nombre d'achats."""
     client = db.execute(
@@ -223,22 +283,84 @@ def carte_client(lien_unique):
         abort(404)
 
     niveaux = get_niveaux_actifs(db)
-    prochain_niveau, achats_manquants = calculer_prochain_niveau(db, client["nombre_achats"])
+    progression = calculer_progression(db, client["nombre_achats"])
 
     cases_cochees = min(client["nombre_achats"], NB_CASES_GRILLE)
+
+    peut_partager = client_peut_partager(db, client)
 
     return render_template(
         "carte_client.html",
         client=client,
         niveaux=niveaux,
-        prochain_niveau=prochain_niveau,
-        achats_manquants=achats_manquants,
+        progression=progression,
         cases_cochees=cases_cochees,
         nb_cases_total=NB_CASES_GRILLE,
         couleur_or=COULEUR_OR,
         couleur_bordeaux=COULEUR_BORDEAUX,
         couleur_vert=COULEUR_VERT,
+        peut_partager=peut_partager,
     )
+
+
+@app.route("/carte/<lien_unique>/partager", methods=["POST"])
+def partager_points(lien_unique):
+    db = get_db()
+    client = db.execute(
+        "SELECT * FROM clients_fidelite WHERE lien_unique = ?", (lien_unique,)
+    ).fetchone()
+    if client is None:
+        abort(404)
+
+    if not client_peut_partager(db, client):
+        flash("Le partage de points n'est pas encore disponible pour votre niveau.", "danger")
+        return redirect(url_for("carte_client", lien_unique=lien_unique))
+
+    numero_destinataire = request.form.get("numero_destinataire", "").strip()
+    points_bruts = request.form.get("points", "0")
+    try:
+        points = int(points_bruts)
+    except ValueError:
+        points = 0
+
+    if points <= 0:
+        flash("Le nombre de points doit être supérieur à zéro.", "danger")
+        return redirect(url_for("carte_client", lien_unique=lien_unique))
+
+    if points > client["score_points"]:
+        flash("Vous n'avez pas assez de points pour partager ce montant.", "danger")
+        return redirect(url_for("carte_client", lien_unique=lien_unique))
+
+    destinataire = db.execute(
+        "SELECT * FROM clients_fidelite WHERE numero = ?", (numero_destinataire,)
+    ).fetchone()
+
+    if destinataire is None:
+        flash("Aucun client trouvé avec ce numéro. Vérifiez qu'il est bien inscrit à FIDÉLITÉ+.", "danger")
+        return redirect(url_for("carte_client", lien_unique=lien_unique))
+
+    if destinataire["id"] == client["id"]:
+        flash("Vous ne pouvez pas vous partager des points à vous-même.", "danger")
+        return redirect(url_for("carte_client", lien_unique=lien_unique))
+
+    maintenant = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    db.execute(
+        "UPDATE clients_fidelite SET score_points = score_points - ?, date_derniere_modification = ? WHERE id = ?",
+        (points, maintenant, client["id"]),
+    )
+    db.execute(
+        "UPDATE clients_fidelite SET score_points = score_points + ?, date_derniere_modification = ? WHERE id = ?",
+        (points, maintenant, destinataire["id"]),
+    )
+    db.execute(
+        """INSERT INTO partages_points (client_source_id, client_dest_id, points_partages)
+           VALUES (?, ?, ?)""",
+        (client["id"], destinataire["id"], points),
+    )
+    db.commit()
+
+    flash(f"🎁 {points} points partagés avec {destinataire['prenom']} {destinataire['nom']} !", "success")
+    return redirect(url_for("carte_client", lien_unique=lien_unique))
 
 
 @app.route("/carte/<lien_unique>/modifier", methods=["POST"])
@@ -528,6 +650,8 @@ def ajouter_niveau():
     avantages = request.form.get("avantages", "").strip()
     couleur = request.form.get("couleur", COULEUR_OR).strip() or COULEUR_OR
     icone = request.form.get("icone", "🏆").strip() or "🏆"
+    seuil_partage_brut = request.form.get("seuil_partage_points", "").strip()
+    seuil_partage = int(seuil_partage_brut) if seuil_partage_brut.isdigit() else None
 
     if not nom_niveau:
         flash("Le nom du niveau est obligatoire.", "danger")
@@ -540,9 +664,9 @@ def ajouter_niveau():
 
     db.execute(
         """INSERT INTO niveaux_fidelite
-           (nom_niveau, nombre_achats_requis, avantages, couleur, icone, actif)
-           VALUES (?, ?, ?, ?, ?, 1)""",
-        (nom_niveau, seuil, avantages, couleur, icone),
+           (nom_niveau, nombre_achats_requis, avantages, couleur, icone, actif, seuil_partage_points)
+           VALUES (?, ?, ?, ?, ?, 1, ?)""",
+        (nom_niveau, seuil, avantages, couleur, icone, seuil_partage),
     )
     db.commit()
     flash("Niveau ajouté.", "success")
@@ -565,6 +689,8 @@ def modifier_niveau(niveau_id):
     couleur = request.form.get("couleur", niveau["couleur"])
     icone = request.form.get("icone", niveau["icone"])
     actif = 1 if request.form.get("actif") == "on" else 0
+    seuil_partage_brut = request.form.get("seuil_partage_points", "").strip()
+    seuil_partage = int(seuil_partage_brut) if seuil_partage_brut.isdigit() else None
 
     try:
         seuil = max(0, int(seuil_brut))
@@ -574,9 +700,9 @@ def modifier_niveau(niveau_id):
     db.execute(
         """UPDATE niveaux_fidelite
            SET nom_niveau = ?, nombre_achats_requis = ?, avantages = ?,
-               couleur = ?, icone = ?, actif = ?
+               couleur = ?, icone = ?, actif = ?, seuil_partage_points = ?
            WHERE id = ?""",
-        (nom_niveau, seuil, avantages, couleur, icone, actif, niveau_id),
+        (nom_niveau, seuil, avantages, couleur, icone, actif, seuil_partage, niveau_id),
     )
     db.commit()
 

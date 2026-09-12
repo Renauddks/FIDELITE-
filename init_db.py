@@ -46,9 +46,15 @@ def creer_tables(conn):
             avantages TEXT,
             couleur TEXT DEFAULT '#D4AF37',
             icone TEXT DEFAULT '🏆',
-            actif INTEGER NOT NULL DEFAULT 1
+            actif INTEGER NOT NULL DEFAULT 1,
+            seuil_partage_points INTEGER
         )
     """)
+
+    # Migration douce pour une base créée avec l'ancienne colonne booléenne
+    colonnes = [c[1] for c in cur.execute("PRAGMA table_info(niveaux_fidelite)").fetchall()]
+    if "seuil_partage_points" not in colonnes:
+        cur.execute("ALTER TABLE niveaux_fidelite ADD COLUMN seuil_partage_points INTEGER")
 
     cur.execute("""
         CREATE TABLE IF NOT EXISTS historique_achats (
@@ -62,6 +68,18 @@ def creer_tables(conn):
         )
     """)
 
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS partages_points (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_source_id INTEGER NOT NULL,
+            client_dest_id INTEGER NOT NULL,
+            points_partages INTEGER NOT NULL,
+            date_partage TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            FOREIGN KEY (client_source_id) REFERENCES clients_fidelite (id),
+            FOREIGN KEY (client_dest_id) REFERENCES clients_fidelite (id)
+        )
+    """)
+
     conn.commit()
 
 
@@ -72,16 +90,16 @@ def seed_niveaux(conn):
         return  # déjà initialisé, on ne double pas les niveaux
 
     niveaux_par_defaut = [
-        ("Nouveau Client", 0, "Bienvenue chez Sandwich du Roi ! Votre carte de fidélité est activée.", "#8B0000", "👑", 1),
-        ("Bienvenue Prince", 1, "5% de réduction sur votre prochain achat", "#D4AF37", "🥉", 1),
-        ("Client Fidèle", 5, "10% de réduction + 1 sandwich offert", "#D4AF37", "🥈", 1),
-        ("Client Royal", 10, "15% de réduction + livraison gratuite", "#D4AF37", "🥇", 1),
-        ("Client Légendaire", 20, "20% de réduction + 2 sandwichs offerts", "#8B0000", "💎", 1),
+        ("Nouveau Client", 0, "Bienvenue chez Sandwich du Roi ! Votre carte de fidélité est activée.", "#8B0000", "👑", 1, None),
+        ("Bienvenue Prince", 1, "5% de réduction sur votre prochain achat", "#D4AF37", "🥉", 1, 50),
+        ("Client Fidèle", 5, "10% de réduction + 1 sandwich offert", "#D4AF37", "🥈", 1, 150),
+        ("Client Royal", 10, "15% de réduction + livraison gratuite", "#D4AF37", "🥇", 1, 250),
+        ("Client Légendaire", 20, "20% de réduction + 2 sandwichs offerts", "#8B0000", "💎", 1, 350),
     ]
 
     cur.executemany("""
-        INSERT INTO niveaux_fidelite (nom_niveau, nombre_achats_requis, avantages, couleur, icone, actif)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO niveaux_fidelite (nom_niveau, nombre_achats_requis, avantages, couleur, icone, actif, seuil_partage_points)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
     """, niveaux_par_defaut)
 
     conn.commit()
