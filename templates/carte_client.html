@@ -71,14 +71,14 @@
                         class="badge-niveau {% if client.nombre_achats >= niveau.nombre_achats_requis %}badge-niveau-atteint{% endif %}"
                         style="border-color: {{ niveau.couleur }};"
                         onclick="ouvrirNiveau('{{ niveau.icone }} {{ niveau.nom_niveau|e }}', '{{ (niveau.avantages or 'Aucun avantage renseigné pour ce niveau.')|e }}')">
-                    {{ niveau.icone }} {{ niveau.nom_niveau }}{% if niveau.seuil_partage_points is not none %} 🎁{% endif %}
+                    {{ niveau.icone }} {{ niveau.nom_niveau }}{% if niveau_max and niveau.id == niveau_max.id %} 🎁{% endif %}
                 </button>
             {% endfor %}
         </div>
     </div>
 
     <div class="carte-fidelite-partage {% if not peut_partager %}partage-verrouille{% endif %}">
-        <p class="titre-section">🎁 Partager mes points</p>
+        <p class="titre-section">🎁 Partager mes points avec un autre client</p>
         {% if peut_partager %}
             <form method="POST" action="{{ url_for('partager_points', lien_unique=client.lien_unique) }}" class="formulaire-partage">
                 <label>Numéro du client bénéficiaire</label>
@@ -90,12 +90,24 @@
             </form>
         {% else %}
             <p class="texte-verrouille">
-                {% if progression.niveau_actuel and progression.niveau_actuel.seuil_partage_points is not none %}
-                    🔒 Il vous faut au moins <strong>{{ progression.niveau_actuel.seuil_partage_points }} points</strong> à votre niveau actuel (<strong>{{ progression.niveau_actuel.nom_niveau }}</strong>) pour partager.
-                    Il vous manque <strong>{{ progression.niveau_actuel.seuil_partage_points - client.score_points }}</strong> point{{ 's' if (progression.niveau_actuel.seuil_partage_points - client.score_points) != 1 else '' }}.
-                {% else %}
-                    🔒 Le partage de points n'est pas encore disponible à votre niveau (<strong>{{ client.statut_actuel }}</strong>). Continuez vos achats pour le débloquer !
-                {% endif %}
+                🔒 Réservé aux clients du niveau <strong>{{ niveau_max.nom_niveau if niveau_max else '—' }}</strong> (le niveau le plus élevé).
+                Continuez vos achats pour l'atteindre et débloquer le partage de points !
+            </p>
+        {% endif %}
+    </div>
+
+    <div class="carte-fidelite-echange">
+        <p class="titre-section">🔄 Échanger mes points contre un bon</p>
+        {% if bons_disponibles > 0 %}
+            <form method="POST" action="{{ url_for('echanger_points', lien_unique=client.lien_unique) }}" class="formulaire-partage">
+                <label>Points à échanger — par paliers de {{ points_par_bon }} (vous pouvez échanger jusqu'à {{ bons_disponibles * points_par_bon }} points)</label>
+                <input type="number" name="points_echanges" min="{{ points_par_bon }}" max="{{ bons_disponibles * points_par_bon }}" step="{{ points_par_bon }}" value="{{ points_par_bon }}" required>
+                <p class="texte-aide">1 bon = {{ points_par_bon }} points. Une fois validé, présentez votre carte au comptoir Sandwich du Roi pour en profiter.</p>
+                <button type="submit" class="bouton bouton-echange">Échanger mes points</button>
+            </form>
+        {% else %}
+            <p class="texte-verrouille">
+                Il vous faut au moins <strong>{{ points_par_bon }} points</strong> pour obtenir un premier bon. Solde actuel : {{ client.score_points }} points.
             </p>
         {% endif %}
     </div>

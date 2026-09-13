@@ -5,6 +5,7 @@
     <h1>Tableau de bord — {{ total_clients }} client{{ 's' if total_clients != 1 else '' }}</h1>
     <div class="barre-admin-actions">
         <a href="{{ url_for('gestion_niveaux') }}" class="bouton bouton-secondaire">🏆 Gérer les niveaux</a>
+        <a href="{{ url_for('gestion_echanges') }}" class="bouton bouton-secondaire">🔄 Échanges de points</a>
         <a href="{{ url_for('admin_logout') }}" class="bouton bouton-texte">Déconnexion</a>
     </div>
 </section>

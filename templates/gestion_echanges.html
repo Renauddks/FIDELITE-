@@ -1,0 +1,50 @@
+{% extends "_base.html" %}
+{% block titre %}Échanges de points{% endblock %}
+{% block contenu %}
+<a href="{{ url_for('admin_dashboard') }}" class="lien-retour">&larr; Retour au tableau de bord</a>
+
+<h1>Échanges de points contre bons</h1>
+
+<div class="tableau-scroll">
+    <table class="tableau-clients">
+        <thead>
+            <tr>
+                <th>Client</th>
+                <th>Numéro</th>
+                <th>Points</th>
+                <th>Bons</th>
+                <th>Date</th>
+                <th>Statut</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for echange in echanges %}
+            <tr>
+                <td>{{ echange.prenom }} {{ echange.nom }}</td>
+                <td>{{ echange.numero or '—' }}</td>
+                <td>{{ echange.points_echanges }}</td>
+                <td>{{ echange.nombre_bons }}</td>
+                <td>{{ echange.date_demande }}</td>
+                <td>
+                    {% if echange.statut == 'en_attente' %}
+                        <span class="badge-statut badge-attente">En attente</span>
+                    {% else %}
+                        <span class="badge-statut badge-honore">Honoré</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if echange.statut == 'en_attente' %}
+                    <form method="POST" action="{{ url_for('honorer_echange', echange_id=echange.id) }}">
+                        <button type="submit" class="bouton bouton-secondaire bouton-mini">✅ Marquer honoré</button>
+                    </form>
+                    {% endif %}
+                </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7" class="ligne-vide">Aucune demande d'échange pour le moment.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
