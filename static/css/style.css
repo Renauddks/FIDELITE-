@@ -20,6 +20,7 @@ body {
     color: var(--gris-texte);
 }
 
+/* -------- En-tête -------- */
 .entete {
     background: linear-gradient(135deg, var(--bordeaux), var(--bordeaux-fonce));
     padding: 18px 16px;
@@ -61,6 +62,7 @@ body {
     color: #999;
 }
 
+/* -------- Messages flash -------- */
 .messages-flash { margin-bottom: 16px; }
 .flash {
     padding: 10px 14px;
@@ -72,6 +74,7 @@ body {
 .flash-danger { background: #fdecea; color: var(--danger); }
 .flash-warning { background: #fff6e0; color: #8a6d00; }
 
+/* -------- Boutons -------- */
 .bouton {
     display: inline-block;
     padding: 10px 18px;
@@ -91,6 +94,7 @@ body {
 .bouton-danger { background: var(--danger); color: var(--blanc); }
 .bouton-mini { padding: 6px 12px; font-size: 0.8rem; }
 
+/* -------- Formulaires -------- */
 form label {
     display: block;
     font-size: 0.85rem;
@@ -115,6 +119,7 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
 .formulaire-recherche { display: flex; gap: 8px; margin-bottom: 14px; }
 .formulaire-recherche input { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #ddd; }
 
+/* -------- Cartes génériques -------- */
 .carte-presentation, .carte-formulaire, .carte-fiche {
     background: var(--blanc);
     border-radius: 14px;
@@ -130,6 +135,7 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
 .texte-aide { font-size: 0.8rem; color: #888; margin-top: 6px; }
 .bloc-action { margin-top: 18px; }
 
+/* -------- Tableau admin -------- */
 .barre-admin { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
 .barre-admin-actions { display: flex; gap: 8px; }
 .tableau-scroll { overflow-x: auto; background: var(--blanc); border-radius: 12px; box-shadow: var(--ombre); }
@@ -140,6 +146,7 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
 .badge-statut { background: var(--or-clair); color: var(--bordeaux-fonce); padding: 3px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: 600; }
 .bouton-lien { background: none; border: 1px solid var(--or); color: var(--bordeaux); border-radius: 8px; padding: 4px 10px; font-size: 0.78rem; cursor: pointer; }
 
+/* -------- Fiche client admin -------- */
 .lien-retour { display: inline-block; margin-bottom: 14px; color: var(--bordeaux); text-decoration: none; font-size: 0.9rem; }
 .fiche-meta { font-size: 0.9rem; color: #666; }
 .fiche-stats { display: flex; gap: 16px; margin-top: 14px; flex-wrap: wrap; }
@@ -148,6 +155,7 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
 .grille-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 @media (max-width: 600px) { .grille-actions { grid-template-columns: 1fr; } }
 
+/* -------- Niveaux (admin) -------- */
 .formulaire-niveau { display: grid; grid-template-columns: 2fr 1fr 70px 70px; gap: 8px; }
 .formulaire-niveau textarea { grid-column: 1 / -1; }
 .formulaire-niveau button { grid-column: 1 / -1; }
@@ -160,58 +168,90 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
 .case-actif input { width: auto; }
 .carte-niveau-actions { display: flex; gap: 8px; margin-top: 12px; }
 
+/* -------- CARTE DE FIDÉLITÉ (client) -------- */
 .carte-fidelite {
     background: var(--blanc);
-    border-radius: 18px;
-    box-shadow: var(--ombre);
+    border-radius: 20px;
+    box-shadow: 0 8px 28px rgba(139, 0, 0, 0.18);
     overflow: hidden;
     border: 1px solid #eee;
 }
-.carte-fidelite-haut {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 10px;
-    padding: 20px;
-    background: linear-gradient(180deg, #fffdf6, var(--blanc));
+
+/* -------- En-tête premium (hero) -------- */
+.carte-fidelite-hero {
+    background: linear-gradient(160deg, var(--bordeaux) 0%, var(--bordeaux-fonce) 60%, #3a0000 100%);
+    color: var(--blanc);
+    text-align: center;
+    padding: 28px 20px 22px;
+    position: relative;
 }
-.bloc-client { display: flex; gap: 10px; align-items: flex-start; min-width: 0; flex: 1; }
-.photo-client {
-    width: 56px; height: 56px;
+.hero-photo {
+    width: 84px; height: 84px;
     border-radius: 50%;
-    background: var(--gris-clair);
+    background: rgba(255,255,255,0.12);
     display: flex; align-items: center; justify-content: center;
     overflow: hidden;
-    border: 2px solid var(--or);
-    flex-shrink: 0;
+    border: 3px solid var(--or);
+    margin: 0 auto 12px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.35);
 }
-.photo-client img { width: 100%; height: 100%; object-fit: cover; }
-.photo-client-vide { font-size: 1.6rem; color: #bbb; }
-.infos-client { min-width: 0; }
-.nom-client { font-weight: 700; font-size: 0.95rem; margin: 0 0 2px; overflow-wrap: break-word; }
-.detail-client { font-size: 0.76rem; color: #777; margin: 2px 0; overflow-wrap: break-word; }
+.hero-photo img { width: 100%; height: 100%; object-fit: cover; }
+.hero-photo-vide { font-size: 2.2rem; color: var(--or-clair); }
+.hero-nom { font-size: 1.25rem; font-weight: 800; margin: 0 0 4px; }
+.hero-contact { font-size: 0.8rem; color: var(--or-clair); margin: 0 0 12px; opacity: 0.95; }
+.hero-statut {
+    display: inline-block;
+    background: var(--or);
+    color: var(--bordeaux-fonce);
+    font-weight: 700;
+    font-size: 0.82rem;
+    padding: 6px 16px;
+    border-radius: 20px;
+    margin-bottom: 18px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+}
 
-.bloc-statut { text-align: center; flex-shrink: 0; width: 92px; }
-.cercle-clignotant {
-    width: 64px; height: 64px;
+.hero-stats {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 22px;
+    margin-bottom: 16px;
+}
+.hero-stat-points .cercle-clignotant {
+    width: 76px; height: 76px;
     border-radius: 50%;
     background: var(--vert);
     color: var(--blanc);
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    margin: 0 auto 6px;
     animation: pulsation 1.8s ease-in-out infinite;
-    box-shadow: 0 0 0 rgba(50, 205, 50, 0.5);
+    border: 3px solid rgba(255,255,255,0.5);
 }
-.cercle-valeur { font-size: 1.1rem; font-weight: 800; line-height: 1; }
-.cercle-libelle { font-size: 0.58rem; text-transform: uppercase; }
+.cercle-valeur { font-size: 1.3rem; font-weight: 800; line-height: 1; }
+.cercle-libelle { font-size: 0.62rem; text-transform: uppercase; }
 @keyframes pulsation {
     0%   { box-shadow: 0 0 0 0 rgba(50, 205, 50, 0.55); }
-    70%  { box-shadow: 0 0 0 10px rgba(50, 205, 50, 0); }
+    70%  { box-shadow: 0 0 0 14px rgba(50, 205, 50, 0); }
     100% { box-shadow: 0 0 0 0 rgba(50, 205, 50, 0); }
 }
-.detail-statut { font-size: 0.72rem; margin: 3px 0; color: #666; overflow-wrap: break-word; }
-.statut-actuel { color: var(--bordeaux); font-weight: 700; }
+.hero-stat-achats {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255,255,255,0.12);
+    border: 2px solid rgba(255,255,255,0.35);
+    border-radius: 16px;
+    padding: 12px 20px;
+    min-width: 76px;
+}
+.hero-stat-achats-valeur { font-size: 1.15rem; font-weight: 800; }
+.hero-stat-achats-label { font-size: 0.62rem; text-transform: uppercase; opacity: 0.9; margin-top: 2px; }
 
+.bouton-clair { background: rgba(255,255,255,0.15); color: var(--blanc); border: 1px solid rgba(255,255,255,0.4); }
+.bouton-clair:hover { background: rgba(255,255,255,0.25); }
+
+/* -------- Progression -------- */
 .titre-section {
     font-size: 0.75rem;
     text-transform: uppercase;
@@ -220,36 +260,62 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
     padding: 0 20px;
     margin: 4px 0 8px;
 }
-.carte-fidelite-progression { padding-top: 14px; border-top: 1px solid #f0f0f0; }
+.carte-fidelite-progression { padding-top: 18px; }
 .grille-cases {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 8px;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 7px;
     padding: 0 20px 16px;
+    max-width: 340px;
+    margin: 0 auto;
 }
 .case-achat {
     aspect-ratio: 1;
     border-radius: 8px;
     border: 2px solid #e2ddd0;
     display: flex; align-items: center; justify-content: center;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     color: var(--blanc);
+    min-width: 0;
 }
 .case-cochee {
-    background: var(--or);
+    background: linear-gradient(145deg, var(--or), #b8860b);
     border-color: var(--or);
     box-shadow: 0 2px 6px rgba(212, 175, 55, 0.5);
 }
 
-.carte-fidelite-message {
-    background: var(--bordeaux);
-    color: var(--blanc);
-    padding: 12px 20px;
-    font-size: 0.9rem;
+.bloc-barre-progression { padding: 4px 20px 20px; }
+.barre-progression-info {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--bordeaux);
+    margin-bottom: 6px;
+}
+.barre-progression {
+    position: relative;
+    height: 16px;
+    background: var(--gris-clair);
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid #eee;
+}
+.barre-progression-remplissage {
+    height: 100%;
+    background: linear-gradient(90deg, var(--or), var(--bordeaux));
+    border-radius: 10px 0 0 10px;
+    transition: width 0.6s ease;
+}
+.barre-progression-message {
+    font-size: 0.82rem;
+    color: var(--gris-texte);
     text-align: center;
+    margin: 10px 0 0;
 }
 
-.carte-fidelite-niveaux { padding: 16px 0 20px; }
+/* -------- Niveaux -------- */
+.carte-fidelite-niveaux { padding: 8px 0 20px; }
 .liste-badges-niveaux {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -273,6 +339,41 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
     color: var(--bordeaux-fonce);
 }
 
+/* -------- Partage de points (niveau 5) -------- */
+.carte-fidelite-partage {
+    margin: 0 20px 20px;
+    padding: 16px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #fff8e6, var(--blanc));
+    border: 2px solid var(--or);
+}
+.formulaire-partage button { margin-top: 6px; width: 100%; }
+.partage-verrouille {
+    background: var(--gris-clair);
+    border: 2px dashed #ddd;
+}
+.texte-verrouille {
+    font-size: 0.85rem;
+    color: #777;
+    text-align: center;
+    margin: 4px 0 0;
+    line-height: 1.5;
+}
+
+.carte-fidelite-echange {
+    margin: 0 20px 20px;
+    padding: 16px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #e8f4fb, var(--blanc));
+    border: 2px solid #2f8fc4;
+}
+.bouton-echange { background: #2f8fc4; color: var(--blanc); width: 100%; margin-top: 6px; }
+.bouton-echange:hover { background: #256f9c; }
+
+.badge-attente { background: #fff3cd; color: #8a6d00; }
+.badge-honore { background: #d4edda; color: #256029; }
+
+/* -------- Modales -------- */
 .modale {
     display: none;
     position: fixed; inset: 0;
@@ -299,4 +400,4 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
     font-size: 1.4rem;
     cursor: pointer;
     color: #999;
-    }
+}
