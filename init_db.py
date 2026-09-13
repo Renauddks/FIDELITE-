@@ -80,6 +80,19 @@ def creer_tables(conn):
         )
     """)
 
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS echanges_points (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_id INTEGER NOT NULL,
+            points_echanges INTEGER NOT NULL,
+            nombre_bons INTEGER NOT NULL,
+            statut TEXT NOT NULL DEFAULT 'en_attente',
+            date_demande TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            date_traitement TEXT,
+            FOREIGN KEY (client_id) REFERENCES clients_fidelite (id)
+        )
+    """)
+
     conn.commit()
 
 

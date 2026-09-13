@@ -181,17 +181,23 @@ def calculer_progression(db, nombre_achats):
     }
 
 
-def get_niveau_partage(db):
-    """Compatibilité : conservé pour d'éventuels appels externes (non utilisé en interne désormais)."""
-    return None
+POINTS_PAR_BON = 50  # valeur d'un bon d'échange — modifiable selon les objectifs de Sandwich du Roi
+
+
+def get_niveau_max(db):
+    """Renvoie le niveau actif le plus élevé (le « niveau 5 », quel que soit son nom)."""
+    return db.execute(
+        "SELECT * FROM niveaux_fidelite WHERE actif = 1 ORDER BY nombre_achats_requis DESC LIMIT 1"
+    ).fetchone()
 
 
 def client_peut_partager(db, client):
-    """Un client peut partager s'il a assez de points selon le seuil de SON niveau actuel."""
+    """Le partage entre clients est réservé au niveau le plus élevé, sans seuil de points."""
     niveau_actuel = get_niveau_actuel_row(db, client["nombre_achats"])
-    if niveau_actuel is None or niveau_actuel["seuil_partage_points"] is None:
+    niveau_max = get_niveau_max(db)
+    if niveau_actuel is None or niveau_max is None:
         return False
-    return client["score_points"] >= niveau_actuel["seuil_partage_points"]
+    return niveau_actuel["id"] == niveau_max["id"]
 
 
 def maj_statut_client(db, client_id):
@@ -288,6 +294,8 @@ def carte_client(lien_unique):
     cases_cochees = min(client["nombre_achats"], NB_CASES_GRILLE)
 
     peut_partager = client_peut_partager(db, client)
+    niveau_max = get_niveau_max(db)
+    bons_disponibles = client["score_points"] // POINTS_PAR_BON
 
     return render_template(
         "carte_client.html",
@@ -300,6 +308,9 @@ def carte_client(lien_unique):
         couleur_bordeaux=COULEUR_BORDEAUX,
         couleur_vert=COULEUR_VERT,
         peut_partager=peut_partager,
+        niveau_max=niveau_max,
+        points_par_bon=POINTS_PAR_BON,
+        bons_disponibles=bons_disponibles,
     )
 
 
@@ -360,6 +371,51 @@ def partager_points(lien_unique):
     db.commit()
 
     flash(f"🎁 {points} points partagés avec {destinataire['prenom']} {destinataire['nom']} !", "success")
+    return redirect(url_for("carte_client", lien_unique=lien_unique))
+
+
+@app.route("/carte/<lien_unique>/echanger", methods=["POST"])
+def echanger_points(lien_unique):
+    db = get_db()
+    client = db.execute(
+        "SELECT * FROM clients_fidelite WHERE lien_unique = ?", (lien_unique,)
+    ).fetchone()
+    if client is None:
+        abort(404)
+
+    points_bruts = request.form.get("points_echanges", "0")
+    try:
+        points = int(points_bruts)
+    except ValueError:
+        points = 0
+
+    if points <= 0 or points % POINTS_PAR_BON != 0:
+        flash(f"Le nombre de points à échanger doit être un multiple de {POINTS_PAR_BON} (ex : {POINTS_PAR_BON}, {POINTS_PAR_BON * 2}...).", "danger")
+        return redirect(url_for("carte_client", lien_unique=lien_unique))
+
+    if points > client["score_points"]:
+        flash("Vous n'avez pas assez de points pour cet échange.", "danger")
+        return redirect(url_for("carte_client", lien_unique=lien_unique))
+
+    nombre_bons = points // POINTS_PAR_BON
+    maintenant = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    db.execute(
+        "UPDATE clients_fidelite SET score_points = score_points - ?, date_derniere_modification = ? WHERE id = ?",
+        (points, maintenant, client["id"]),
+    )
+    db.execute(
+        """INSERT INTO echanges_points (client_id, points_echanges, nombre_bons)
+           VALUES (?, ?, ?)""",
+        (client["id"], points, nombre_bons),
+    )
+    db.commit()
+
+    flash(
+        f"🔄 Demande enregistrée : {nombre_bons} bon(s) de {POINTS_PAR_BON} points. "
+        f"Présentez cette carte au comptoir Sandwich du Roi pour en profiter !",
+        "success",
+    )
     return redirect(url_for("carte_client", lien_unique=lien_unique))
 
 
@@ -723,6 +779,40 @@ def supprimer_niveau(niveau_id):
     db.commit()
     flash("Niveau supprimé.", "warning")
     return redirect(url_for("gestion_niveaux"))
+
+
+# ----------------------------------------------------------------------
+# ADMINISTRATION — ÉCHANGES DE POINTS CONTRE BONS
+# ----------------------------------------------------------------------
+
+@app.route("/admin/echanges")
+@admin_requis
+def gestion_echanges():
+    db = get_db()
+    echanges = db.execute(
+        """SELECT echanges_points.*, clients_fidelite.nom, clients_fidelite.prenom, clients_fidelite.numero
+           FROM echanges_points
+           JOIN clients_fidelite ON clients_fidelite.id = echanges_points.client_id
+           ORDER BY
+               CASE WHEN echanges_points.statut = 'en_attente' THEN 0 ELSE 1 END,
+               echanges_points.date_demande DESC"""
+    ).fetchall()
+    return render_template("gestion_echanges.html", echanges=echanges)
+
+
+@app.route("/admin/echanges/<int:echange_id>/honorer", methods=["POST"])
+@admin_requis
+def honorer_echange(echange_id):
+    db = get_db()
+    db.execute(
+        """UPDATE echanges_points
+           SET statut = 'honore', date_traitement = ?
+           WHERE id = ?""",
+        (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), echange_id),
+    )
+    db.commit()
+    flash("Échange marqué comme honoré.", "success")
+    return redirect(url_for("gestion_echanges"))
 
 
 # ----------------------------------------------------------------------
