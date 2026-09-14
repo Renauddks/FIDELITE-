@@ -11,8 +11,8 @@
             <tr>
                 <th>Client</th>
                 <th>Numéro</th>
+                <th>Demande</th>
                 <th>Points</th>
-                <th>Bons</th>
                 <th>Date</th>
                 <th>Statut</th>
                 <th></th>
@@ -23,8 +23,8 @@
             <tr>
                 <td>{{ echange.prenom }} {{ echange.nom }}</td>
                 <td>{{ echange.numero or '—' }}</td>
+                <td>{{ echange.produit_nom or (echange.nombre_bons ~ ' bon(s)') }}</td>
                 <td>{{ echange.points_echanges }}</td>
-                <td>{{ echange.nombre_bons }}</td>
                 <td>{{ echange.date_demande }}</td>
                 <td>
                     {% if echange.statut == 'en_attente' %}

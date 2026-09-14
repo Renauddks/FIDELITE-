@@ -1,0 +1,42 @@
+{% extends "_base.html" %}
+{% block titre %}Menu de récompenses{% endblock %}
+{% block contenu %}
+<a href="{{ url_for('admin_dashboard') }}" class="lien-retour">&larr; Retour au tableau de bord</a>
+
+<h1>Menu de récompenses (échange de points)</h1>
+<p class="texte-aide">Ces articles sont proposés aux clients dans la section « Échanger mes points contre un menu » de leur carte.</p>
+
+<section class="carte-formulaire">
+    <h2>Ajouter un article</h2>
+    <form method="POST" action="{{ url_for('ajouter_produit_menu') }}" class="formulaire-niveau">
+        <input type="text" name="nom_produit" placeholder="Nom de l'article" required>
+        <input type="number" name="cout_points" placeholder="Coût en points" min="1" required>
+        <textarea name="description" placeholder="Description (optionnel)" rows="2"></textarea>
+        <button type="submit" class="bouton bouton-principal">+ Ajouter</button>
+    </form>
+</section>
+
+<section class="liste-niveaux">
+    {% for produit in menu %}
+    <form method="POST" action="{{ url_for('modifier_produit_menu', produit_id=produit.id) }}" class="carte-niveau">
+        <div class="carte-niveau-entete">
+            <input type="text" name="nom_produit" value="{{ produit.nom_produit }}" class="champ-nom">
+        </div>
+        <label>Coût en points</label>
+        <input type="number" name="cout_points" value="{{ produit.cout_points }}" min="1">
+        <label>Description</label>
+        <textarea name="description" rows="2">{{ produit.description or '' }}</textarea>
+        <label class="case-actif">
+            <input type="checkbox" name="actif" {% if produit.actif %}checked{% endif %}>
+            Article actif (visible par les clients)
+        </label>
+        <div class="carte-niveau-actions">
+            <button type="submit" class="bouton bouton-secondaire bouton-mini">Enregistrer</button>
+            <button type="submit" formaction="{{ url_for('supprimer_produit_menu', produit_id=produit.id) }}" class="bouton bouton-danger bouton-mini" data-confirmation="Supprimer {{ produit.nom_produit }} du menu ?">Supprimer</button>
+        </div>
+    </form>
+    {% else %}
+    <p class="texte-aide">Aucun article pour le moment.</p>
+    {% endfor %}
+</section>
+{% endblock %}

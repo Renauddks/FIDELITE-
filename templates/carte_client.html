@@ -77,6 +77,13 @@
         </div>
     </div>
 
+    {% if notification_whatsapp and notification_whatsapp.lien %}
+    <div class="bandeau-notification">
+        <p>📲 Prévenez <strong>{{ notification_whatsapp.nom_destinataire }}</strong> directement sur WhatsApp :</p>
+        <a href="{{ notification_whatsapp.lien }}" target="_blank" rel="noopener" class="bouton bouton-whatsapp">Envoyer le message WhatsApp</a>
+    </div>
+    {% endif %}
+
     <div class="carte-fidelite-partage {% if not peut_partager %}partage-verrouille{% endif %}">
         <p class="titre-section">🎁 Partager mes points avec un autre client</p>
         {% if peut_partager %}
@@ -97,18 +104,23 @@
     </div>
 
     <div class="carte-fidelite-echange">
-        <p class="titre-section">🔄 Échanger mes points contre un bon</p>
-        {% if bons_disponibles > 0 %}
+        <p class="titre-section">🍔 Échanger mes points contre un menu</p>
+        {% if menu %}
             <form method="POST" action="{{ url_for('echanger_points', lien_unique=client.lien_unique) }}" class="formulaire-partage">
-                <label>Points à échanger — par paliers de {{ points_par_bon }} (vous pouvez échanger jusqu'à {{ bons_disponibles * points_par_bon }} points)</label>
-                <input type="number" name="points_echanges" min="{{ points_par_bon }}" max="{{ bons_disponibles * points_par_bon }}" step="{{ points_par_bon }}" value="{{ points_par_bon }}" required>
-                <p class="texte-aide">1 bon = {{ points_par_bon }} points. Une fois validé, présentez votre carte au comptoir Sandwich du Roi pour en profiter.</p>
-                <button type="submit" class="bouton bouton-echange">Échanger mes points</button>
+                <label>Choisissez un article (solde actuel : {{ client.score_points }} points)</label>
+                <select name="produit_id" required>
+                    <option value="" disabled selected>-- Sélectionner --</option>
+                    {% for produit in menu %}
+                        <option value="{{ produit.id }}" {% if produit.cout_points > client.score_points %}disabled{% endif %}>
+                            {{ produit.nom_produit }} — {{ produit.cout_points }} points{% if produit.cout_points > client.score_points %} (solde insuffisant){% endif %}
+                        </option>
+                    {% endfor %}
+                </select>
+                <p class="texte-aide">Votre demande sera envoyée directement sur le WhatsApp de Sandwich du Roi pour confirmation.</p>
+                <button type="submit" class="bouton bouton-echange">Échanger contre ce menu</button>
             </form>
         {% else %}
-            <p class="texte-verrouille">
-                Il vous faut au moins <strong>{{ points_par_bon }} points</strong> pour obtenir un premier bon. Solde actuel : {{ client.score_points }} points.
-            </p>
+            <p class="texte-verrouille">Aucun article disponible pour le moment.</p>
         {% endif %}
     </div>
 </div>
