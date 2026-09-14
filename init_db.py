@@ -89,7 +89,23 @@ def creer_tables(conn):
             statut TEXT NOT NULL DEFAULT 'en_attente',
             date_demande TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
             date_traitement TEXT,
+            produit_nom TEXT,
             FOREIGN KEY (client_id) REFERENCES clients_fidelite (id)
+        )
+    """)
+
+    # Migration douce si la table existait déjà sans cette colonne
+    colonnes_echanges = [c[1] for c in cur.execute("PRAGMA table_info(echanges_points)").fetchall()]
+    if "produit_nom" not in colonnes_echanges:
+        cur.execute("ALTER TABLE echanges_points ADD COLUMN produit_nom TEXT")
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS menu_echange (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            nom_produit TEXT NOT NULL,
+            cout_points INTEGER NOT NULL,
+            description TEXT,
+            actif INTEGER NOT NULL DEFAULT 1
         )
     """)
 
@@ -118,10 +134,31 @@ def seed_niveaux(conn):
     conn.commit()
 
 
+def seed_menu_echange(conn):
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM menu_echange")
+    if cur.fetchone()[0] > 0:
+        return  # déjà initialisé
+
+    menu_par_defaut = [
+        ("Sandwich ordinaire offert", 150, "Un sandwich ordinaire au choix, offert", 1),
+        ("Boisson offerte", 50, "Jus, café ou lait caillé au choix", 1),
+        ("Chocolat chaud offert", 100, "Un chocolat chaud offert", 1),
+    ]
+
+    cur.executemany("""
+        INSERT INTO menu_echange (nom_produit, cout_points, description, actif)
+        VALUES (?, ?, ?, ?)
+    """, menu_par_defaut)
+
+    conn.commit()
+
+
 def main():
     conn = sqlite3.connect(DB_PATH)
     creer_tables(conn)
     seed_niveaux(conn)
+    seed_menu_echange(conn)
     conn.close()
     print(f"Base de données FIDÉLITÉ+ prête : {DB_PATH}")
 

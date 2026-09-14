@@ -78,6 +78,7 @@ def init_db_if_needed():
     conn = sqlite3.connect(DB_PATH)
     init_db.creer_tables(conn)
     init_db.seed_niveaux(conn)
+    init_db.seed_menu_echange(conn)
     conn.close()
 
 
@@ -182,6 +183,16 @@ def calculer_progression(db, nombre_achats):
 
 
 POINTS_PAR_BON = 50  # valeur d'un bon d'échange — modifiable selon les objectifs de Sandwich du Roi
+WHATSAPP_SANDWICH_DU_ROI = os.environ.get("WHATSAPP_SANDWICH_DU_ROI", "2290197992160")
+
+
+def lien_whatsapp(numero, texte):
+    """Construit un lien wa.me pré-rempli (numéro nettoyé des espaces/signes)."""
+    numero_propre = re.sub(r"[^0-9]", "", numero or "")
+    if not numero_propre:
+        return None
+    from urllib.parse import quote
+    return f"https://wa.me/{numero_propre}?text={quote(texte)}"
 
 
 def get_niveau_max(db):
@@ -295,7 +306,12 @@ def carte_client(lien_unique):
 
     peut_partager = client_peut_partager(db, client)
     niveau_max = get_niveau_max(db)
-    bons_disponibles = client["score_points"] // POINTS_PAR_BON
+
+    menu = db.execute(
+        "SELECT * FROM menu_echange WHERE actif = 1 ORDER BY cout_points ASC"
+    ).fetchall()
+
+    notification_whatsapp = session.pop("notification_whatsapp", None)
 
     return render_template(
         "carte_client.html",
@@ -309,8 +325,8 @@ def carte_client(lien_unique):
         couleur_vert=COULEUR_VERT,
         peut_partager=peut_partager,
         niveau_max=niveau_max,
-        points_par_bon=POINTS_PAR_BON,
-        bons_disponibles=bons_disponibles,
+        menu=menu,
+        notification_whatsapp=notification_whatsapp,
     )
 
 
@@ -354,6 +370,9 @@ def partager_points(lien_unique):
         flash("Vous ne pouvez pas vous partager des points à vous-même.", "danger")
         return redirect(url_for("carte_client", lien_unique=lien_unique))
 
+    nouveau_solde_x = client["score_points"] - points
+    nouveau_solde_y = destinataire["score_points"] + points
+
     maintenant = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     db.execute(
         "UPDATE clients_fidelite SET score_points = score_points - ?, date_derniere_modification = ? WHERE id = ?",
@@ -370,7 +389,23 @@ def partager_points(lien_unique):
     )
     db.commit()
 
-    flash(f"🎁 {points} points partagés avec {destinataire['prenom']} {destinataire['nom']} !", "success")
+    # Message pour X (l'expéditeur), affiché immédiatement sur sa carte
+    flash(
+        f"🎁 Vous avez offert {points} points à {destinataire['prenom']} {destinataire['nom']}. "
+        f"Votre nouveau solde : {nouveau_solde_x} points.",
+        "success",
+    )
+
+    # Notification pour Y (le bénéficiaire) : lien WhatsApp prêt à envoyer par X
+    texte_pour_y = (
+        f"Bonjour {destinataire['prenom']} ! {client['prenom']} {client['nom']} vous a offert "
+        f"{points} points de fidélité Sandwich du Roi 🎁 Votre nouveau solde est de {nouveau_solde_y} points."
+    )
+    session["notification_whatsapp"] = {
+        "lien": lien_whatsapp(destinataire["numero"], texte_pour_y),
+        "nom_destinataire": f"{destinataire['prenom']} {destinataire['nom']}",
+    }
+
     return redirect(url_for("carte_client", lien_unique=lien_unique))
 
 
@@ -383,39 +418,54 @@ def echanger_points(lien_unique):
     if client is None:
         abort(404)
 
-    points_bruts = request.form.get("points_echanges", "0")
+    produit_id_brut = request.form.get("produit_id", "")
     try:
-        points = int(points_bruts)
+        produit_id = int(produit_id_brut)
     except ValueError:
-        points = 0
-
-    if points <= 0 or points % POINTS_PAR_BON != 0:
-        flash(f"Le nombre de points à échanger doit être un multiple de {POINTS_PAR_BON} (ex : {POINTS_PAR_BON}, {POINTS_PAR_BON * 2}...).", "danger")
+        flash("Choisissez un article du menu.", "danger")
         return redirect(url_for("carte_client", lien_unique=lien_unique))
 
-    if points > client["score_points"]:
-        flash("Vous n'avez pas assez de points pour cet échange.", "danger")
+    produit = db.execute(
+        "SELECT * FROM menu_echange WHERE id = ? AND actif = 1", (produit_id,)
+    ).fetchone()
+
+    if produit is None:
+        flash("Cet article n'est plus disponible.", "danger")
         return redirect(url_for("carte_client", lien_unique=lien_unique))
 
-    nombre_bons = points // POINTS_PAR_BON
+    if produit["cout_points"] > client["score_points"]:
+        flash("Vous n'avez pas assez de points pour cet article.", "danger")
+        return redirect(url_for("carte_client", lien_unique=lien_unique))
+
+    nouveau_solde = client["score_points"] - produit["cout_points"]
     maintenant = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     db.execute(
         "UPDATE clients_fidelite SET score_points = score_points - ?, date_derniere_modification = ? WHERE id = ?",
-        (points, maintenant, client["id"]),
+        (produit["cout_points"], maintenant, client["id"]),
     )
     db.execute(
-        """INSERT INTO echanges_points (client_id, points_echanges, nombre_bons)
-           VALUES (?, ?, ?)""",
-        (client["id"], points, nombre_bons),
+        """INSERT INTO echanges_points (client_id, points_echanges, nombre_bons, produit_nom)
+           VALUES (?, ?, ?, ?)""",
+        (client["id"], produit["cout_points"], 0, produit["nom_produit"]),
     )
     db.commit()
 
     flash(
-        f"🔄 Demande enregistrée : {nombre_bons} bon(s) de {POINTS_PAR_BON} points. "
-        f"Présentez cette carte au comptoir Sandwich du Roi pour en profiter !",
+        f"🍔 Demande enregistrée : {produit['nom_produit']} contre {produit['cout_points']} points. "
+        f"Votre nouveau solde : {nouveau_solde} points.",
         "success",
     )
+
+    texte_whatsapp = (
+        f"Bonjour Sandwich du Roi ! Je suis {client['prenom']} {client['nom']} ({client['numero']}). "
+        f"Je souhaite échanger {produit['cout_points']} points contre : {produit['nom_produit']}. Merci de confirmer 🙏"
+    )
+    session["notification_whatsapp"] = {
+        "lien": lien_whatsapp(WHATSAPP_SANDWICH_DU_ROI, texte_whatsapp),
+        "nom_destinataire": "Sandwich du Roi",
+    }
+
     return redirect(url_for("carte_client", lien_unique=lien_unique))
 
 
@@ -813,6 +863,88 @@ def honorer_echange(echange_id):
     db.commit()
     flash("Échange marqué comme honoré.", "success")
     return redirect(url_for("gestion_echanges"))
+
+
+# ----------------------------------------------------------------------
+# ADMINISTRATION — MENU DE RÉCOMPENSES (échange de points)
+# ----------------------------------------------------------------------
+
+@app.route("/admin/menu-echange")
+@admin_requis
+def gestion_menu_echange():
+    db = get_db()
+    menu = db.execute(
+        "SELECT * FROM menu_echange ORDER BY cout_points ASC"
+    ).fetchall()
+    return render_template("gestion_menu_echange.html", menu=menu)
+
+
+@app.route("/admin/menu-echange/ajouter", methods=["POST"])
+@admin_requis
+def ajouter_produit_menu():
+    db = get_db()
+    nom_produit = request.form.get("nom_produit", "").strip()
+    cout_brut = request.form.get("cout_points", "0")
+    description = request.form.get("description", "").strip()
+
+    if not nom_produit:
+        flash("Le nom de l'article est obligatoire.", "danger")
+        return redirect(url_for("gestion_menu_echange"))
+
+    try:
+        cout_points = max(1, int(cout_brut))
+    except ValueError:
+        cout_points = 1
+
+    db.execute(
+        """INSERT INTO menu_echange (nom_produit, cout_points, description, actif)
+           VALUES (?, ?, ?, 1)""",
+        (nom_produit, cout_points, description),
+    )
+    db.commit()
+    flash("Article ajouté au menu.", "success")
+    return redirect(url_for("gestion_menu_echange"))
+
+
+@app.route("/admin/menu-echange/modifier/<int:produit_id>", methods=["POST"])
+@admin_requis
+def modifier_produit_menu(produit_id):
+    db = get_db()
+    produit = db.execute(
+        "SELECT * FROM menu_echange WHERE id = ?", (produit_id,)
+    ).fetchone()
+    if produit is None:
+        abort(404)
+
+    nom_produit = request.form.get("nom_produit", produit["nom_produit"]).strip()
+    cout_brut = request.form.get("cout_points", str(produit["cout_points"]))
+    description = request.form.get("description", produit["description"])
+    actif = 1 if request.form.get("actif") == "on" else 0
+
+    try:
+        cout_points = max(1, int(cout_brut))
+    except ValueError:
+        cout_points = produit["cout_points"]
+
+    db.execute(
+        """UPDATE menu_echange
+           SET nom_produit = ?, cout_points = ?, description = ?, actif = ?
+           WHERE id = ?""",
+        (nom_produit, cout_points, description, actif, produit_id),
+    )
+    db.commit()
+    flash("Article modifié.", "success")
+    return redirect(url_for("gestion_menu_echange"))
+
+
+@app.route("/admin/menu-echange/supprimer/<int:produit_id>", methods=["POST"])
+@admin_requis
+def supprimer_produit_menu(produit_id):
+    db = get_db()
+    db.execute("DELETE FROM menu_echange WHERE id = ?", (produit_id,))
+    db.commit()
+    flash("Article supprimé du menu.", "warning")
+    return redirect(url_for("gestion_menu_echange"))
 
 
 # ----------------------------------------------------------------------
