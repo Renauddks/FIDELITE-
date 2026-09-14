@@ -370,6 +370,23 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
 .bouton-echange { background: #2f8fc4; color: var(--blanc); width: 100%; margin-top: 6px; }
 .bouton-echange:hover { background: #256f9c; }
 
+.bandeau-notification {
+    margin: 0 20px 18px;
+    padding: 14px 16px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #dcf8c6, #e8fce0);
+    border: 2px solid #25D366;
+    text-align: center;
+}
+.bandeau-notification p { margin: 0 0 10px; font-size: 0.88rem; color: var(--gris-texte); }
+.bouton-whatsapp {
+    background: #25D366;
+    color: var(--blanc);
+    display: inline-block;
+    width: 100%;
+}
+.bouton-whatsapp:hover { background: #1ebe57; }
+
 .badge-attente { background: #fff3cd; color: #8a6d00; }
 .badge-honore { background: #d4edda; color: #256029; }
 
