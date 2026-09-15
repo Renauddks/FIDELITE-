@@ -77,6 +77,17 @@
         </div>
     </div>
 
+    {% if notifications %}
+    <div class="bloc-notifications">
+        {% for notif in notifications %}
+        <div class="notification-item">
+            <p>{{ notif.message }}</p>
+            <span class="notification-date">{{ notif.date_creation }}</span>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
     {% if notification_whatsapp and notification_whatsapp.lien %}
     <div class="bandeau-notification">
         <p>📲 Prévenez <strong>{{ notification_whatsapp.nom_destinataire }}</strong> directement sur WhatsApp :</p>
