@@ -195,6 +195,14 @@ def lien_whatsapp(numero, texte):
     return f"https://wa.me/{numero_propre}?text={quote(texte)}"
 
 
+def notifier(db, client_id, message):
+    """Crée une notification interne (visible à la prochaine consultation de la carte du client)."""
+    db.execute(
+        "INSERT INTO notifications (client_id, message) VALUES (?, ?)",
+        (client_id, message),
+    )
+
+
 def get_niveau_max(db):
     """Renvoie le niveau actif le plus élevé (le « niveau 5 », quel que soit son nom)."""
     return db.execute(
@@ -311,6 +319,17 @@ def carte_client(lien_unique):
         "SELECT * FROM menu_echange WHERE actif = 1 ORDER BY cout_points ASC"
     ).fetchall()
 
+    notifications = db.execute(
+        "SELECT * FROM notifications WHERE client_id = ? AND lu = 0 ORDER BY date_creation ASC",
+        (client["id"],),
+    ).fetchall()
+    if notifications:
+        db.execute(
+            "UPDATE notifications SET lu = 1 WHERE client_id = ? AND lu = 0",
+            (client["id"],),
+        )
+        db.commit()
+
     notification_whatsapp = session.pop("notification_whatsapp", None)
 
     return render_template(
@@ -326,6 +345,7 @@ def carte_client(lien_unique):
         peut_partager=peut_partager,
         niveau_max=niveau_max,
         menu=menu,
+        notifications=notifications,
         notification_whatsapp=notification_whatsapp,
     )
 
@@ -389,22 +409,26 @@ def partager_points(lien_unique):
     )
     db.commit()
 
-    # Message pour X (l'expéditeur), affiché immédiatement sur sa carte
+    # Notification interne pour X (l'expéditeur)
+    notifier(
+        db, client["id"],
+        f"✅ Vous avez offert {points} points à {destinataire['prenom']} {destinataire['nom']}. "
+        f"Nouveau solde : {nouveau_solde_x} points."
+    )
+
+    # Notification interne pour Y (le bénéficiaire)
+    notifier(
+        db, destinataire["id"],
+        f"🎁 {client['prenom']} {client['nom']} vous a offert {points} points ! "
+        f"Nouveau solde : {nouveau_solde_y} points."
+    )
+    db.commit()
+
     flash(
         f"🎁 Vous avez offert {points} points à {destinataire['prenom']} {destinataire['nom']}. "
         f"Votre nouveau solde : {nouveau_solde_x} points.",
         "success",
     )
-
-    # Notification pour Y (le bénéficiaire) : lien WhatsApp prêt à envoyer par X
-    texte_pour_y = (
-        f"Bonjour {destinataire['prenom']} ! {client['prenom']} {client['nom']} vous a offert "
-        f"{points} points de fidélité Sandwich du Roi 🎁 Votre nouveau solde est de {nouveau_solde_y} points."
-    )
-    session["notification_whatsapp"] = {
-        "lien": lien_whatsapp(destinataire["numero"], texte_pour_y),
-        "nom_destinataire": f"{destinataire['prenom']} {destinataire['nom']}",
-    }
 
     return redirect(url_for("carte_client", lien_unique=lien_unique))
 

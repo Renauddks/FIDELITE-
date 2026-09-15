@@ -109,6 +109,17 @@ def creer_tables(conn):
         )
     """)
 
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_id INTEGER NOT NULL,
+            message TEXT NOT NULL,
+            lu INTEGER NOT NULL DEFAULT 0,
+            date_creation TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            FOREIGN KEY (client_id) REFERENCES clients_fidelite (id)
+        )
+    """)
+
     conn.commit()
 
 
