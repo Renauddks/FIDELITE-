@@ -370,6 +370,22 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
 .bouton-echange { background: #2f8fc4; color: var(--blanc); width: 100%; margin-top: 6px; }
 .bouton-echange:hover { background: #256f9c; }
 
+.bloc-notifications {
+    margin: 16px 20px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.notification-item {
+    background: linear-gradient(135deg, #fff8e6, #fffdf6);
+    border-left: 4px solid var(--or);
+    border-radius: 10px;
+    padding: 10px 14px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+.notification-item p { margin: 0; font-size: 0.86rem; color: var(--gris-texte); }
+.notification-date { font-size: 0.68rem; color: #999; }
+
 .bandeau-notification {
     margin: 0 20px 18px;
     padding: 14px 16px;
