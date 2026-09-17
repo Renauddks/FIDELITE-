@@ -35,6 +35,10 @@
             Niveau actif
         </label>
         <p class="texte-aide">🎁 Le partage de points entre clients est automatiquement réservé au niveau le plus élevé (le plus grand nombre d'achats requis).</p>
+        <label class="case-actif">
+            <input type="checkbox" name="palier_plancher" {% if niveau.palier_plancher %}checked{% endif %}>
+            ⏳ Niveau plancher — le statut ne redescend jamais en dessous de celui-ci après 30 jours d'inactivité
+        </label>
         <div class="carte-niveau-actions">
             <button type="submit" class="bouton bouton-secondaire bouton-mini">Enregistrer</button>
             <button type="submit" formaction="{{ url_for('supprimer_niveau', niveau_id=niveau.id) }}" class="bouton bouton-danger bouton-mini" data-confirmation="Supprimer le niveau {{ niveau.nom_niveau }} ?">Supprimer</button>

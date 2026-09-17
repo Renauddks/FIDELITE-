@@ -3,98 +3,128 @@
 {% block og_titre %}🏆 La carte FIDÉLITÉ+ de {{ client.prenom }} {{ client.nom }}{% endblock %}
 {% block og_description %}{{ client.statut_actuel }} · {{ client.nombre_achats }} achat{{ 's' if client.nombre_achats != 1 else '' }} · Sandwich du Roi{% endblock %}
 {% block contenu %}
-<div class="carte-fidelite">
 
-    <div class="carte-fidelite-hero">
-        <div class="hero-photo">
-            {% if client.photo %}
-                <img src="{{ url_for('static', filename=client.photo) }}" alt="Photo de {{ client.prenom }}">
-            {% else %}
-                <span class="hero-photo-vide">👤</span>
+<!-- Navigation par icônes : Ma carte / Partager / Échanger -->
+<div class="nav-icones">
+    <button type="button" class="icone-nav icone-active" data-vue="carte" onclick="changerVue('carte')">
+        <span class="icone-emoji">💳</span><span>Ma carte</span>
+    </button>
+    <button type="button" class="icone-nav" data-vue="partage" onclick="changerVue('partage')">
+        <span class="icone-emoji">🎁</span><span>Partager</span>
+    </button>
+    <button type="button" class="icone-nav" data-vue="echange" onclick="changerVue('echange')">
+        <span class="icone-emoji">🍔</span><span>Échanger</span>
+    </button>
+</div>
+
+{% if notifications %}
+<div class="bloc-notifications">
+    {% for notif in notifications %}
+    <div class="notification-item">
+        <p>{{ notif.message }}</p>
+        <span class="notification-date">{{ notif.date_creation }}</span>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if notification_whatsapp and notification_whatsapp.lien %}
+<div class="bandeau-notification">
+    <p>📲 Prévenez <strong>{{ notification_whatsapp.nom_destinataire }}</strong> directement sur WhatsApp :</p>
+    <a href="{{ notification_whatsapp.lien }}" target="_blank" rel="noopener" class="bouton bouton-whatsapp">Envoyer le message WhatsApp</a>
+</div>
+{% endif %}
+
+<!-- VUE : MA CARTE -->
+<div id="vue-carte" class="vue-section">
+    <div class="carte-fidelite">
+
+        <div class="carte-fidelite-hero">
+            <div class="hero-photo">
+                {% if client.photo %}
+                    <img src="{{ url_for('static', filename=client.photo) }}" alt="Photo de {{ client.prenom }}">
+                {% else %}
+                    <span class="hero-photo-vide">👤</span>
+                {% endif %}
+            </div>
+            <p class="hero-nom">{{ client.prenom }} {{ client.nom }}</p>
+            <p class="hero-contact">📱 {{ client.numero or 'Non renseigné' }} &nbsp;·&nbsp; 🎂 {{ client.age or '—' }} ans</p>
+            <span class="hero-statut">🏆 {{ niveau_effectif.nom_niveau if niveau_effectif else client.statut_actuel }}</span>
+
+            {% if statut_degrade %}
+            <p class="alerte-degradation">
+                ⏳ Statut réduit pour inactivité ({{ jours_inactivite }} jours sans achat).
+                Un nouvel achat vous ramène immédiatement à votre niveau <strong>{{ niveau_acquis.nom_niveau }}</strong> !
+            </p>
             {% endif %}
-        </div>
-        <p class="hero-nom">{{ client.prenom }} {{ client.nom }}</p>
-        <p class="hero-contact">📱 {{ client.numero or 'Non renseigné' }} &nbsp;·&nbsp; 🎂 {{ client.age or '—' }} ans</p>
-        <span class="hero-statut">🏆 {{ client.statut_actuel }}</span>
 
-        <div class="hero-stats">
-            <div class="hero-stat-points">
-                <div class="cercle-clignotant">
-                    <span class="cercle-valeur">{{ client.score_points }}</span>
-                    <span class="cercle-libelle">points</span>
+            <div class="hero-stats">
+                <div class="hero-stat-points">
+                    <div class="cercle-clignotant">
+                        <span class="cercle-valeur">{{ client.score_points }}</span>
+                        <span class="cercle-libelle">points</span>
+                    </div>
+                </div>
+                <div class="hero-stat-achats">
+                    <span class="hero-stat-achats-valeur">🛒 {{ client.nombre_achats }}</span>
+                    <span class="hero-stat-achats-label">achat{{ 's' if client.nombre_achats != 1 else '' }}</span>
                 </div>
             </div>
-            <div class="hero-stat-achats">
-                <span class="hero-stat-achats-valeur">🛒 {{ client.nombre_achats }}</span>
-                <span class="hero-stat-achats-label">achat{{ 's' if client.nombre_achats != 1 else '' }}</span>
-            </div>
+
+            <button type="button" class="bouton bouton-mini bouton-clair" onclick="document.getElementById('modale-modifier').classList.add('modale-visible')">
+                ✏️ Modifier mes infos
+            </button>
         </div>
 
-        <button type="button" class="bouton bouton-mini bouton-clair" onclick="document.getElementById('modale-modifier').classList.add('modale-visible')">
-            ✏️ Modifier mes infos
-        </button>
-    </div>
-
-    <div class="carte-fidelite-progression">
-        <p class="titre-section">Progression</p>
-        <div class="grille-cases">
-            {% for i in range(1, nb_cases_total + 1) %}
-                <span class="case-achat {% if i <= cases_cochees %}case-cochee{% endif %}">
-                    {% if i <= cases_cochees %}✔{% endif %}
-                </span>
-            {% endfor %}
-        </div>
-
-        <div class="bloc-barre-progression">
-            <div class="barre-progression-info">
-                <span>{{ progression.niveau_actuel.nom_niveau if progression.niveau_actuel else 'Nouveau Client' }}</span>
-                <span>{{ progression.niveau_suivant.nom_niveau if progression.niveau_suivant else 'Niveau max' }}</span>
-            </div>
-            <div class="barre-progression">
-                <div class="barre-progression-remplissage" style="width: {{ progression.pourcentage }}%;"></div>
-            </div>
-            <p class="barre-progression-message">
-                {% if progression.niveau_suivant %}
-                    <strong>{{ progression.pourcentage }}%</strong> — encore <strong>{{ progression.achats_manquants }}</strong> achat{{ 's' if progression.achats_manquants != 1 else '' }} pour <strong>{{ progression.niveau_suivant.nom_niveau }}</strong>
-                {% else %}
-                    🎉 Niveau maximum atteint — merci pour votre fidélité !
-                {% endif %}
+        <div class="carte-fidelite-progression">
+            <p class="titre-section">
+                Progression — carte n°{{ cartes_completees + 1 }}
+                {% if cartes_completees > 0 %}<span class="puce-cartes">🏆 {{ cartes_completees }} carte{{ 's' if cartes_completees != 1 else '' }} complétée{{ 's' if cartes_completees != 1 else '' }}</span>{% endif %}
             </p>
+            <div class="grille-cases">
+                {% for i in range(1, nb_cases_total + 1) %}
+                    <span class="case-achat {% if i <= cases_cochees %}case-cochee{% endif %}">
+                        {% if i <= cases_cochees %}✔{% endif %}
+                    </span>
+                {% endfor %}
+            </div>
+
+            <div class="bloc-barre-progression">
+                <div class="barre-progression-info">
+                    <span>{{ progression.niveau_actuel.nom_niveau if progression.niveau_actuel else 'Nouveau Client' }}</span>
+                    <span>{{ progression.niveau_suivant.nom_niveau if progression.niveau_suivant else 'Niveau max' }}</span>
+                </div>
+                <div class="barre-progression">
+                    <div class="barre-progression-remplissage" style="width: {{ progression.pourcentage }}%;"></div>
+                </div>
+                <p class="barre-progression-message">
+                    {% if progression.niveau_suivant %}
+                        <strong>{{ progression.pourcentage }}%</strong> — encore <strong>{{ progression.achats_manquants }}</strong> achat{{ 's' if progression.achats_manquants != 1 else '' }} pour <strong>{{ progression.niveau_suivant.nom_niveau }}</strong>
+                    {% else %}
+                        🎉 Niveau maximum atteint — merci pour votre fidélité !
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+
+        <div class="carte-fidelite-niveaux">
+            <p class="titre-section">Niveaux &amp; avantages</p>
+            <div class="liste-badges-niveaux">
+                {% for niveau in niveaux %}
+                    <button type="button"
+                            class="badge-niveau {% if client.nombre_achats >= niveau.nombre_achats_requis %}badge-niveau-atteint{% endif %}"
+                            style="border-color: {{ niveau.couleur }};"
+                            onclick="ouvrirNiveau('{{ niveau.icone }} {{ niveau.nom_niveau|e }}', '{{ (niveau.avantages or 'Aucun avantage renseigné pour ce niveau.')|e }}')">
+                        {{ niveau.icone }} {{ niveau.nom_niveau }}{% if niveau_max and niveau.id == niveau_max.id %} 🎁{% endif %}
+                    </button>
+                {% endfor %}
+            </div>
         </div>
     </div>
+</div>
 
-    <div class="carte-fidelite-niveaux">
-        <p class="titre-section">Niveaux &amp; avantages</p>
-        <div class="liste-badges-niveaux">
-            {% for niveau in niveaux %}
-                <button type="button"
-                        class="badge-niveau {% if client.nombre_achats >= niveau.nombre_achats_requis %}badge-niveau-atteint{% endif %}"
-                        style="border-color: {{ niveau.couleur }};"
-                        onclick="ouvrirNiveau('{{ niveau.icone }} {{ niveau.nom_niveau|e }}', '{{ (niveau.avantages or 'Aucun avantage renseigné pour ce niveau.')|e }}')">
-                    {{ niveau.icone }} {{ niveau.nom_niveau }}{% if niveau_max and niveau.id == niveau_max.id %} 🎁{% endif %}
-                </button>
-            {% endfor %}
-        </div>
-    </div>
-
-    {% if notifications %}
-    <div class="bloc-notifications">
-        {% for notif in notifications %}
-        <div class="notification-item">
-            <p>{{ notif.message }}</p>
-            <span class="notification-date">{{ notif.date_creation }}</span>
-        </div>
-        {% endfor %}
-    </div>
-    {% endif %}
-
-    {% if notification_whatsapp and notification_whatsapp.lien %}
-    <div class="bandeau-notification">
-        <p>📲 Prévenez <strong>{{ notification_whatsapp.nom_destinataire }}</strong> directement sur WhatsApp :</p>
-        <a href="{{ notification_whatsapp.lien }}" target="_blank" rel="noopener" class="bouton bouton-whatsapp">Envoyer le message WhatsApp</a>
-    </div>
-    {% endif %}
-
+<!-- VUE : PARTAGER -->
+<div id="vue-partage" class="vue-section vue-cachee">
     <div class="carte-fidelite-partage {% if not peut_partager %}partage-verrouille{% endif %}">
         <p class="titre-section">🎁 Partager mes points avec un autre client</p>
         {% if peut_partager %}
@@ -113,7 +143,10 @@
             </p>
         {% endif %}
     </div>
+</div>
 
+<!-- VUE : ÉCHANGER -->
+<div id="vue-echange" class="vue-section vue-cachee">
     <div class="carte-fidelite-echange">
         <p class="titre-section">🍔 Échanger mes points contre un menu</p>
         {% if menu %}
@@ -173,6 +206,15 @@ function ouvrirNiveau(titre, avantages) {
     document.getElementById('modale-niveau-titre').textContent = titre;
     document.getElementById('modale-niveau-avantages').textContent = avantages;
     document.getElementById('modale-niveau').classList.add('modale-visible');
+}
+
+function changerVue(vue) {
+    document.querySelectorAll('.vue-section').forEach(function (el) {
+        el.classList.toggle('vue-cachee', el.id !== 'vue-' + vue);
+    });
+    document.querySelectorAll('.icone-nav').forEach(function (bouton) {
+        bouton.classList.toggle('icone-active', bouton.getAttribute('data-vue') === vue);
+    });
 }
 </script>
 {% endblock %}

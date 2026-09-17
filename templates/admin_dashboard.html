@@ -46,7 +46,10 @@
                 <tr>
                     <td>{{ client.prenom }} {{ client.nom }}</td>
                     <td>{{ client.numero or '—' }}</td>
-                    <td><span class="badge-statut">{{ client.statut_actuel }}</span></td>
+                    <td>
+                        <span class="badge-statut">{{ client.statut_effectif }}</span>
+                        {% if client.statut_degrade %}<span title="Statut réduit pour inactivité">⏳</span>{% endif %}
+                    </td>
                     <td>{{ client.nombre_achats }}</td>
                     <td>{{ client.score_points }}</td>
                     <td>

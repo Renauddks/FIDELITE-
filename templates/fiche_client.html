@@ -13,10 +13,13 @@
     </p>
 
     <div class="fiche-stats">
-        <div class="fiche-stat"><span class="fiche-stat-valeur">{{ client.statut_actuel }}</span><span>Statut</span></div>
+        <div class="fiche-stat"><span class="fiche-stat-valeur">{{ niveau_effectif.nom_niveau if niveau_effectif else client.statut_actuel }}</span><span>Statut</span></div>
         <div class="fiche-stat"><span class="fiche-stat-valeur">{{ client.nombre_achats }}</span><span>Achats</span></div>
         <div class="fiche-stat"><span class="fiche-stat-valeur">{{ client.score_points }}</span><span>Points</span></div>
     </div>
+    {% if statut_degrade %}
+    <p class="texte-aide">⏳ Statut réduit pour inactivité ({{ jours_inactivite }} jours sans achat) — niveau réellement acquis : <strong>{{ niveau_acquis.nom_niveau }}</strong>, restauré au prochain achat.</p>
+    {% endif %}
 </section>
 
 <div class="grille-actions">
