@@ -203,63 +203,6 @@ def notifier(db, client_id, message):
     )
 
 
-JOURS_PAR_PALIER_INACTIVITE = 30  # durée d'inactivité avant de perdre un palier de statut
-
-
-def get_derniere_date_achat(db, client):
-    """Date du dernier achat du client, ou date de création de sa carte s'il n'a jamais acheté."""
-    row = db.execute(
-        "SELECT MAX(date_achat) AS derniere FROM historique_achats WHERE client_id = ?",
-        (client["id"],),
-    ).fetchone()
-    reference = row["derniere"] if row and row["derniere"] else client["date_creation"]
-    try:
-        return datetime.strptime(reference, "%Y-%m-%d %H:%M:%S")
-    except (TypeError, ValueError):
-        return datetime.now()
-
-
-def get_niveau_plancher(db):
-    """Niveau en dessous duquel le statut ne redescend jamais, quelle que soit l'inactivité."""
-    return db.execute(
-        "SELECT * FROM niveaux_fidelite WHERE palier_plancher = 1 AND actif = 1 LIMIT 1"
-    ).fetchone()
-
-
-def get_statut_effectif(db, client):
-    """
-    Renvoie (niveau_effectif, niveau_acquis, jours_inactivite, statut_degrade).
-    Le niveau acquis (basé sur nombre_achats) ne change jamais.
-    Le niveau effectif redescend d'un palier tous les 30 jours sans achat,
-    jusqu'au niveau plancher (Client Fidèle par défaut) — puis se stabilise.
-    Un nouvel achat restaure immédiatement le niveau acquis (l'inactivité repart à zéro).
-    """
-    niveaux = get_niveaux_actifs(db)
-    niveau_acquis = get_niveau_actuel_row(db, client["nombre_achats"])
-    if not niveaux or niveau_acquis is None:
-        return niveau_acquis, niveau_acquis, 0, False
-
-    derniere_date = get_derniere_date_achat(db, client)
-    jours_inactivite = max(0, (datetime.now() - derniere_date).days)
-    paliers_recul = jours_inactivite // JOURS_PAR_PALIER_INACTIVITE
-
-    if paliers_recul == 0:
-        return niveau_acquis, niveau_acquis, jours_inactivite, False
-
-    index_acquis = next((i for i, n in enumerate(niveaux) if n["id"] == niveau_acquis["id"]), 0)
-
-    plancher = get_niveau_plancher(db)
-    index_plancher = 0
-    if plancher:
-        index_plancher = next((i for i, n in enumerate(niveaux) if n["id"] == plancher["id"]), 0)
-
-    nouvel_index = max(index_plancher, index_acquis - paliers_recul)
-    niveau_effectif = niveaux[nouvel_index]
-    statut_degrade = niveau_effectif["id"] != niveau_acquis["id"]
-
-    return niveau_effectif, niveau_acquis, jours_inactivite, statut_degrade
-
-
 def get_niveau_max(db):
     """Renvoie le niveau actif le plus élevé (le « niveau 5 », quel que soit son nom)."""
     return db.execute(
@@ -268,12 +211,12 @@ def get_niveau_max(db):
 
 
 def client_peut_partager(db, client):
-    """Le partage entre clients est réservé au niveau le plus élevé, en tenant compte de la dégradation par inactivité."""
-    niveau_effectif, _, _, _ = get_statut_effectif(db, client)
+    """Le partage entre clients est réservé au niveau le plus élevé, sans seuil de points."""
+    niveau_actuel = get_niveau_actuel_row(db, client["nombre_achats"])
     niveau_max = get_niveau_max(db)
-    if niveau_effectif is None or niveau_max is None:
+    if niveau_actuel is None or niveau_max is None:
         return False
-    return niveau_effectif["id"] == niveau_max["id"]
+    return niveau_actuel["id"] == niveau_max["id"]
 
 
 def maj_statut_client(db, client_id):
@@ -373,7 +316,6 @@ def carte_client(lien_unique):
 
     peut_partager = client_peut_partager(db, client)
     niveau_max = get_niveau_max(db)
-    niveau_effectif, niveau_acquis, jours_inactivite, statut_degrade = get_statut_effectif(db, client)
 
     menu = db.execute(
         "SELECT * FROM menu_echange WHERE actif = 1 ORDER BY cout_points ASC"
@@ -406,10 +348,6 @@ def carte_client(lien_unique):
         niveau_max=niveau_max,
         menu=menu,
         cartes_completees=cartes_completees,
-        niveau_effectif=niveau_effectif,
-        niveau_acquis=niveau_acquis,
-        jours_inactivite=jours_inactivite,
-        statut_degrade=statut_degrade,
         notifications=notifications,
         notification_whatsapp=notification_whatsapp,
     )
@@ -627,17 +565,9 @@ def admin_dashboard():
 
     total_clients = db.execute("SELECT COUNT(*) AS n FROM clients_fidelite").fetchone()["n"]
 
-    clients_enrichis = []
-    for c in clients:
-        niveau_effectif, _, _, statut_degrade = get_statut_effectif(db, c)
-        c_dict = dict(c)
-        c_dict["statut_effectif"] = niveau_effectif["nom_niveau"] if niveau_effectif else c["statut_actuel"]
-        c_dict["statut_degrade"] = statut_degrade
-        clients_enrichis.append(c_dict)
-
     return render_template(
         "admin_dashboard.html",
-        clients=clients_enrichis,
+        clients=clients,
         total_clients=total_clients,
         recherche=recherche,
     )
@@ -698,11 +628,8 @@ def fiche_client(client_id):
         (client_id,),
     ).fetchall()
     niveaux = get_niveaux_actifs(db)
-    niveau_effectif, niveau_acquis, jours_inactivite, statut_degrade = get_statut_effectif(db, client)
     return render_template(
-        "fiche_client.html", client=client, historique=historique, niveaux=niveaux,
-        niveau_effectif=niveau_effectif, niveau_acquis=niveau_acquis,
-        jours_inactivite=jours_inactivite, statut_degrade=statut_degrade,
+        "fiche_client.html", client=client, historique=historique, niveaux=niveaux
     )
 
 
@@ -917,23 +844,18 @@ def modifier_niveau(niveau_id):
     actif = 1 if request.form.get("actif") == "on" else 0
     seuil_partage_brut = request.form.get("seuil_partage_points", "").strip()
     seuil_partage = int(seuil_partage_brut) if seuil_partage_brut.isdigit() else None
-    palier_plancher = 1 if request.form.get("palier_plancher") == "on" else 0
 
     try:
         seuil = max(0, int(seuil_brut))
     except ValueError:
         seuil = niveau["nombre_achats_requis"]
 
-    if palier_plancher:
-        # Un seul niveau plancher à la fois : on retire le statut des autres
-        db.execute("UPDATE niveaux_fidelite SET palier_plancher = 0 WHERE id != ?", (niveau_id,))
-
     db.execute(
         """UPDATE niveaux_fidelite
            SET nom_niveau = ?, nombre_achats_requis = ?, avantages = ?,
-               couleur = ?, icone = ?, actif = ?, seuil_partage_points = ?, palier_plancher = ?
+               couleur = ?, icone = ?, actif = ?, seuil_partage_points = ?
            WHERE id = ?""",
-        (nom_niveau, seuil, avantages, couleur, icone, actif, seuil_partage, palier_plancher, niveau_id),
+        (nom_niveau, seuil, avantages, couleur, icone, actif, seuil_partage, niveau_id),
     )
     db.commit()
 
