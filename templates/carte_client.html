@@ -49,7 +49,14 @@
             </div>
             <p class="hero-nom">{{ client.prenom }} {{ client.nom }}</p>
             <p class="hero-contact">📱 {{ client.numero or 'Non renseigné' }} &nbsp;·&nbsp; 🎂 {{ client.age or '—' }} ans</p>
-            <span class="hero-statut">🏆 {{ client.statut_actuel }}</span>
+            <span class="hero-statut">🏆 {{ niveau_effectif.nom_niveau if niveau_effectif else client.statut_actuel }}</span>
+
+            {% if statut_degrade %}
+            <p class="alerte-degradation">
+                ⏳ Statut réduit pour inactivité ({{ jours_inactivite }} jours sans achat).
+                Un nouvel achat vous ramène immédiatement à votre niveau <strong>{{ niveau_acquis.nom_niveau }}</strong> !
+            </p>
+            {% endif %}
 
             <div class="hero-stats">
                 <div class="hero-stat-points">
