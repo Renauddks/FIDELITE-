@@ -6,6 +6,7 @@
 <section class="carte-fiche">
     <h1>{{ client.prenom }} {{ client.nom }}</h1>
     <p class="fiche-meta">📱 {{ client.numero or '—' }} · 🎂 {{ client.age or '—' }} ans</p>
+    {% if client.lieu_livraison %}<p class="fiche-meta">📍 {{ client.lieu_livraison }}</p>{% endif %}
     <p class="fiche-meta">
         Lien individuel :
         <code>/carte/{{ client.lien_unique }}</code>

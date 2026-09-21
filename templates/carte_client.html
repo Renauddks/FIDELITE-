@@ -49,6 +49,7 @@
             </div>
             <p class="hero-nom">{{ client.prenom }} {{ client.nom }}</p>
             <p class="hero-contact">📱 {{ client.numero or 'Non renseigné' }} &nbsp;·&nbsp; 🎂 {{ client.age or '—' }} ans</p>
+            {% if client.lieu_livraison %}<p class="hero-contact">📍 {{ client.lieu_livraison }}</p>{% endif %}
             <span class="hero-statut">🏆 {{ niveau_effectif.nom_niveau if niveau_effectif else client.statut_actuel }}</span>
 
             {% if statut_degrade %}
@@ -83,9 +84,7 @@
             </p>
             <div class="grille-cases">
                 {% for i in range(1, nb_cases_total + 1) %}
-                    <span class="case-achat {% if i <= cases_cochees %}case-cochee{% endif %}">
-                        {% if i <= cases_cochees %}✔{% endif %}
-                    </span>
+                    <span class="case-achat {% if i <= cases_cochees %}case-cochee{% endif %}" {% if i <= cases_cochees %}aria-label="Achat validé"{% endif %}></span>
                 {% endfor %}
             </div>
 
@@ -194,6 +193,8 @@
             <input type="text" name="numero" value="{{ client.numero or '' }}">
             <label>Âge</label>
             <input type="number" name="age" value="{{ client.age or '' }}" min="0" max="120">
+            <label>Lieu de livraison</label>
+            <input type="text" name="lieu_livraison" value="{{ client.lieu_livraison or '' }}" placeholder="Ex : Houeyiho, avant le carrefour...">
             <button type="submit" class="bouton bouton-principal">Enregistrer</button>
         </form>
     </div>

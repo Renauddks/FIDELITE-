@@ -22,8 +22,9 @@
     <form method="POST" action="{{ url_for('modifier_niveau', niveau_id=niveau.id) }}" class="carte-niveau" style="border-color: {{ niveau.couleur }};">
         <div class="carte-niveau-entete">
             <input type="text" name="icone" value="{{ niveau.icone }}" maxlength="4" class="champ-icone">
-            <input type="text" name="nom_niveau" value="{{ niveau.nom_niveau }}" class="champ-nom">
         </div>
+        <label>Nom du niveau</label>
+        <input type="text" name="nom_niveau" value="{{ niveau.nom_niveau }}" class="champ-nom-pleine-largeur">
         <label>Achats requis</label>
         <input type="number" name="nombre_achats_requis" value="{{ niveau.nombre_achats_requis }}" min="0">
         <label>Avantages</label>
