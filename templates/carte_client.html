@@ -1,19 +1,25 @@
 {% extends "_base.html" %}
 {% block titre %}Carte de {{ client.prenom }}{% endblock %}
-{% block og_titre %}🏆 La carte FIDÉLITÉ+ de {{ client.prenom }} {{ client.nom }}{% endblock %}
-{% block og_description %}{{ client.statut_actuel }} · {{ client.nombre_achats }} achat{{ 's' if client.nombre_achats != 1 else '' }} · Sandwich du Roi{% endblock %}
+{% block og_titre %}👑 L'ascension royale de {{ client.prenom }} {{ client.nom }}{% endblock %}
+{% block og_description %}{{ niveau_effectif.nom_niveau if niveau_effectif else client.statut_actuel }} · {{ client.nombre_achats }} achat{{ 's' if client.nombre_achats != 1 else '' }} · Sandwich du Roi{% endblock %}
 {% block contenu %}
 
-<!-- Navigation par icônes : Ma carte / Partager / Échanger -->
+<!-- Navigation par icônes -->
 <div class="nav-icones">
     <button type="button" class="icone-nav icone-active" data-vue="carte" onclick="changerVue('carte')">
         <span class="icone-emoji">💳</span><span>Ma carte</span>
     </button>
+    <button type="button" class="icone-nav" data-vue="privileges" onclick="changerVue('privileges')">
+        <span class="icone-emoji">🎁</span><span>Privilèges</span>
+    </button>
     <button type="button" class="icone-nav" data-vue="partage" onclick="changerVue('partage')">
-        <span class="icone-emoji">🎁</span><span>Partager</span>
+        <span class="icone-emoji">🤝</span><span>Partager</span>
     </button>
     <button type="button" class="icone-nav" data-vue="echange" onclick="changerVue('echange')">
         <span class="icone-emoji">🍔</span><span>Échanger</span>
+    </button>
+    <button type="button" class="icone-nav" data-vue="historique" onclick="changerVue('historique')">
+        <span class="icone-emoji">📜</span><span>Historique</span>
     </button>
 </div>
 
@@ -37,6 +43,12 @@
 
 <!-- VUE : MA CARTE -->
 <div id="vue-carte" class="vue-section">
+
+    <div class="entete-royal">
+        <p class="eyebrow-royal">👑 MON ASCENSION ROYALE</p>
+        <p class="tagline-royal">Chaque commande vous rapproche du sommet.</p>
+    </div>
+
     <div class="carte-fidelite">
 
         <div class="carte-fidelite-hero">
@@ -50,12 +62,12 @@
             <p class="hero-nom">{{ client.prenom }} {{ client.nom }}</p>
             <p class="hero-contact">📱 {{ client.numero or 'Non renseigné' }} &nbsp;·&nbsp; 🎂 {{ client.age or '—' }} ans</p>
             {% if client.lieu_livraison %}<p class="hero-contact">📍 {{ client.lieu_livraison }}</p>{% endif %}
-            <span class="hero-statut">🏆 {{ niveau_effectif.nom_niveau if niveau_effectif else client.statut_actuel }}</span>
+            <span class="hero-statut">{{ (niveau_effectif.icone if niveau_effectif else '👑') }} {{ niveau_effectif.nom_niveau if niveau_effectif else client.statut_actuel }}</span>
 
             {% if statut_degrade %}
             <p class="alerte-degradation">
                 ⏳ Statut réduit pour inactivité ({{ jours_inactivite }} jours sans achat).
-                Un nouvel achat vous ramène immédiatement à votre niveau <strong>{{ niveau_acquis.nom_niveau }}</strong> !
+                Un nouvel achat vous ramène immédiatement à votre rang de <strong>{{ niveau_acquis.nom_niveau }}</strong> !
             </p>
             {% endif %}
 
@@ -90,42 +102,93 @@
 
             <div class="bloc-barre-progression">
                 <div class="barre-progression-info">
-                    <span>{{ progression.niveau_actuel.nom_niveau if progression.niveau_actuel else 'Nouveau Client' }}</span>
-                    <span>{{ progression.niveau_suivant.nom_niveau if progression.niveau_suivant else 'Niveau max' }}</span>
+                    <span>{{ progression.niveau_actuel.nom_niveau if progression.niveau_actuel else 'Sujet du Royaume' }}</span>
+                    <span>{{ progression.niveau_suivant.nom_niveau if progression.niveau_suivant else 'Rang suprême' }}</span>
                 </div>
                 <div class="barre-progression">
                     <div class="barre-progression-remplissage" style="width: {{ progression.pourcentage }}%;"></div>
                 </div>
                 <p class="barre-progression-message">
                     {% if progression.niveau_suivant %}
-                        <strong>{{ progression.pourcentage }}%</strong> — encore <strong>{{ progression.achats_manquants }}</strong> achat{{ 's' if progression.achats_manquants != 1 else '' }} pour <strong>{{ progression.niveau_suivant.nom_niveau }}</strong>
+                        🎯 <strong>{{ progression.pourcentage }}%</strong> — plus que <strong>{{ progression.achats_manquants }}</strong> achat{{ 's' if progression.achats_manquants != 1 else '' }} pour devenir <strong>{{ progression.niveau_suivant.nom_niveau }}</strong> !
                     {% else %}
-                        🎉 Niveau maximum atteint — merci pour votre fidélité !
+                        🎉 Rang suprême atteint — votre fidélité est votre couronne !
                     {% endif %}
                 </p>
             </div>
         </div>
 
-        <div class="carte-fidelite-niveaux">
-            <p class="titre-section">Niveaux &amp; avantages</p>
-            <div class="liste-badges-niveaux">
+        <div class="carte-fidelite-parcours">
+            <p class="titre-section">🏰 Votre parcours</p>
+            <div class="parcours-royal">
                 {% for niveau in niveaux %}
-                    <button type="button"
-                            class="badge-niveau {% if client.nombre_achats >= niveau.nombre_achats_requis %}badge-niveau-atteint{% endif %}"
-                            style="border-color: {{ niveau.couleur }};"
-                            onclick="ouvrirNiveau('{{ niveau.icone }} {{ niveau.nom_niveau|e }}', '{{ (niveau.avantages or 'Aucun avantage renseigné pour ce niveau.')|e }}')">
-                        {{ niveau.icone }} {{ niveau.nom_niveau }}{% if niveau_max and niveau.id == niveau_max.id %} 🎁{% endif %}
-                    </button>
+                    {% set atteint = client.nombre_achats >= niveau.nombre_achats_requis %}
+                    {% set courant = progression.niveau_actuel and niveau.id == progression.niveau_actuel.id %}
+                    <div class="parcours-etape {% if courant %}parcours-courant{% elif atteint %}parcours-atteint{% else %}parcours-verrouille{% endif %}">
+                        <div class="parcours-marqueur">
+                            <span class="parcours-icone">{{ niveau.icone }}</span>
+                            {% if courant %}<span class="parcours-pastille">📍</span>{% elif atteint %}<span class="parcours-pastille">✅</span>{% else %}<span class="parcours-pastille">🔒</span>{% endif %}
+                        </div>
+                        <button type="button" class="parcours-corps"
+                                onclick="ouvrirNiveau('{{ niveau.icone }} {{ niveau.nom_niveau|e }}', '{{ (niveau.avantages or 'Aucun avantage renseigné pour ce niveau.')|e }}')">
+                            <span class="parcours-nom">{{ niveau.nom_niveau }}{% if niveau_max and niveau.id == niveau_max.id %} 🎁{% endif %}</span>
+                            <span class="parcours-seuil">🎯 {{ niveau.nombre_achats_requis }} achat{{ 's' if niveau.nombre_achats_requis != 1 else '' }}</span>
+                            <span class="parcours-recompense">🎁 {{ niveau.avantages or 'Avantage à venir' }}</span>
+                        </button>
+                    </div>
+                    {% if not loop.last %}<div class="parcours-lien"></div>{% endif %}
                 {% endfor %}
             </div>
         </div>
     </div>
 </div>
 
+<!-- VUE : MES PRIVILÈGES -->
+<div id="vue-privileges" class="vue-section vue-cachee">
+    <div class="carte-privileges">
+        <p class="titre-section">🎁 Mes privilèges</p>
+
+        <p class="sous-titre-privileges">✅ Récompenses débloquées</p>
+        {% if niveaux_debloques %}
+            <div class="liste-privileges">
+                {% for niveau in niveaux_debloques %}
+                <div class="privilege-item privilege-debloque">
+                    <span class="privilege-icone">{{ niveau.icone }}</span>
+                    <div>
+                        <p class="privilege-nom">{{ niveau.nom_niveau }}</p>
+                        <p class="privilege-detail">{{ niveau.avantages or 'Avantage à venir' }}</p>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p class="texte-verrouille">Votre premier achat débloquera votre première récompense !</p>
+        {% endif %}
+
+        <p class="sous-titre-privileges">🔮 Prochaine récompense</p>
+        {% if niveau_suivant_privilege %}
+            <div class="liste-privileges">
+                <div class="privilege-item privilege-a-venir">
+                    <span class="privilege-icone">{{ niveau_suivant_privilege.icone }}</span>
+                    <div>
+                        <p class="privilege-nom">{{ niveau_suivant_privilege.nom_niveau }}</p>
+                        <p class="privilege-detail">{{ niveau_suivant_privilege.avantages or 'Avantage à venir' }}</p>
+                        <p class="privilege-detail">🎯 Encore {{ progression.achats_manquants }} achat{{ 's' if progression.achats_manquants != 1 else '' }}</p>
+                    </div>
+                </div>
+            </div>
+        {% else %}
+            <p class="texte-verrouille">🏆 Vous avez atteint le rang suprême — il n'y a plus haut !</p>
+        {% endif %}
+
+        <p class="texte-aide">💡 Vos points de fidélité (indépendants de votre rang) s'échangent contre des articles dans l'onglet "🍔 Échanger".</p>
+    </div>
+</div>
+
 <!-- VUE : PARTAGER -->
 <div id="vue-partage" class="vue-section vue-cachee">
     <div class="carte-fidelite-partage {% if not peut_partager %}partage-verrouille{% endif %}">
-        <p class="titre-section">🎁 Partager mes points avec un autre client</p>
+        <p class="titre-section">🤝 Partager mes points avec un autre client</p>
         {% if peut_partager %}
             <form method="POST" action="{{ url_for('partager_points', lien_unique=client.lien_unique) }}" class="formulaire-partage">
                 <label>Numéro du client bénéficiaire</label>
@@ -137,7 +200,7 @@
             </form>
         {% else %}
             <p class="texte-verrouille">
-                🔒 Réservé aux clients du niveau <strong>{{ niveau_max.nom_niveau if niveau_max else '—' }}</strong> (le niveau le plus élevé).
+                🔒 Réservé aux clients du rang <strong>{{ niveau_max.nom_niveau if niveau_max else '—' }}</strong> (le rang le plus élevé).
                 Continuez vos achats pour l'atteindre et débloquer le partage de points !
             </p>
         {% endif %}
@@ -164,6 +227,31 @@
             </form>
         {% else %}
             <p class="texte-verrouille">Aucun article disponible pour le moment.</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- VUE : MON HISTORIQUE -->
+<div id="vue-historique" class="vue-section vue-cachee">
+    <div class="carte-historique">
+        <p class="titre-section">📜 Mon historique d'achats</p>
+        {% if historique %}
+            <div class="liste-historique">
+                {% for achat in historique %}
+                <div class="historique-item">
+                    <div>
+                        <p class="historique-date">{{ achat.date_achat }}</p>
+                        {% if achat.note %}<p class="historique-note">{{ achat.note }}</p>{% endif %}
+                    </div>
+                    <div class="historique-montants">
+                        <span class="historique-montant">{{ achat.montant }} FCFA</span>
+                        <span class="historique-points">+{{ achat.points_ajoutes }} pts</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p class="texte-verrouille">Aucun achat enregistré pour le moment. Votre parcours commence au prochain passage !</p>
         {% endif %}
     </div>
 </div>
