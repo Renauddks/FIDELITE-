@@ -170,13 +170,146 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
 .carte-niveau-actions { display: flex; gap: 8px; margin-top: 12px; }
 
 /* -------- CARTE DE FIDÉLITÉ (client) -------- */
+.entete-royal { text-align: center; margin-bottom: 12px; }
+.eyebrow-royal {
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 1px;
+    color: var(--bordeaux);
+    margin: 0 0 4px;
+}
+.tagline-royal {
+    font-size: 0.82rem;
+    color: #888;
+    font-style: italic;
+    margin: 0;
+}
+
+.carte-fidelite-parcours { padding: 4px 0 22px; }
+.parcours-royal {
+    display: flex;
+    flex-direction: column;
+    padding: 0 20px;
+}
+.parcours-etape {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+}
+.parcours-marqueur {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
+    width: 40px;
+}
+.parcours-icone {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    background: var(--gris-clair);
+    border: 2px solid #ddd;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.15rem;
+}
+.parcours-pastille { font-size: 0.85rem; margin-top: 2px; }
+.parcours-corps {
+    flex: 1;
+    background: var(--blanc);
+    border: 1px solid #eee;
+    border-radius: 12px;
+    padding: 10px 14px;
+    margin-bottom: 4px;
+    text-align: left;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.parcours-nom { font-weight: 700; font-size: 0.9rem; color: var(--gris-texte); }
+.parcours-seuil { font-size: 0.74rem; color: #888; }
+.parcours-recompense { font-size: 0.76rem; color: var(--bordeaux); }
+.parcours-lien {
+    width: 2px;
+    height: 18px;
+    background: #e2ddd0;
+    margin-left: 39px;
+}
+
+.parcours-atteint .parcours-icone { background: var(--or-clair); border-color: var(--or); }
+.parcours-atteint .parcours-corps { border-color: var(--or-clair); }
+
+.parcours-courant .parcours-icone {
+    background: var(--bordeaux);
+    border-color: var(--bordeaux);
+    color: var(--blanc);
+    box-shadow: 0 0 0 4px rgba(139, 0, 0, 0.15);
+}
+.parcours-courant .parcours-corps { border: 2px solid var(--bordeaux); }
+.parcours-courant .parcours-nom { color: var(--bordeaux); }
+
+.parcours-verrouille .parcours-corps { opacity: 0.6; }
+.parcours-verrouille .parcours-nom { color: #999; }
+
+/* -------- Mes privilèges -------- */
+.carte-privileges {
+    background: var(--blanc);
+    border-radius: 18px;
+    box-shadow: var(--ombre);
+    padding: 20px;
+    margin-bottom: 16px;
+}
+.sous-titre-privileges {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--bordeaux);
+    margin: 16px 0 8px;
+}
+.liste-privileges { display: flex; flex-direction: column; gap: 8px; }
+.privilege-item {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 10px 12px;
+    border-radius: 12px;
+}
+.privilege-debloque { background: #fff8e6; border: 1px solid var(--or-clair); }
+.privilege-a-venir { background: var(--gris-clair); border: 1px dashed #ddd; }
+.privilege-icone { font-size: 1.4rem; }
+.privilege-nom { font-weight: 700; font-size: 0.88rem; margin: 0 0 2px; }
+.privilege-detail { font-size: 0.78rem; color: #777; margin: 0; }
+
+/* -------- Mon historique -------- */
+.carte-historique {
+    background: var(--blanc);
+    border-radius: 18px;
+    box-shadow: var(--ombre);
+    padding: 20px;
+    margin-bottom: 16px;
+}
+.liste-historique { display: flex; flex-direction: column; gap: 8px; }
+.historique-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    background: var(--gris-clair);
+    border-radius: 10px;
+}
+.historique-date { font-size: 0.8rem; font-weight: 600; margin: 0; }
+.historique-note { font-size: 0.72rem; color: #888; margin: 2px 0 0; }
+.historique-montants { text-align: right; }
+.historique-montant { display: block; font-weight: 700; color: var(--bordeaux); font-size: 0.85rem; }
+.historique-points { display: block; font-size: 0.72rem; color: #2f8fc4; }
+
 .nav-icones {
     display: flex;
+    flex-wrap: wrap;
     gap: 8px;
     margin-bottom: 16px;
 }
 .icone-nav {
     flex: 1;
+    min-width: 30%;
     display: flex;
     flex-direction: column;
     align-items: center;
