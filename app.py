@@ -392,6 +392,16 @@ def carte_client(lien_unique):
 
     notification_whatsapp = session.pop("notification_whatsapp", None)
 
+    historique = db.execute(
+        """SELECT * FROM historique_achats
+           WHERE client_id = ? ORDER BY date_achat DESC""",
+        (client["id"],),
+    ).fetchall()
+
+    # Récompenses déjà débloquées / à venir, pour l'onglet "Mes privilèges"
+    niveaux_debloques = [n for n in niveaux if client["nombre_achats"] >= n["nombre_achats_requis"]]
+    niveau_suivant_privilege = progression["niveau_suivant"]
+
     return render_template(
         "carte_client.html",
         client=client,
@@ -412,6 +422,9 @@ def carte_client(lien_unique):
         statut_degrade=statut_degrade,
         notifications=notifications,
         notification_whatsapp=notification_whatsapp,
+        historique=historique,
+        niveaux_debloques=niveaux_debloques,
+        niveau_suivant_privilege=niveau_suivant_privilege,
     )
 
 

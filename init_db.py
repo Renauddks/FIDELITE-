@@ -139,11 +139,13 @@ def seed_niveaux(conn):
         return  # déjà initialisé, on ne double pas les niveaux
 
     niveaux_par_defaut = [
-        ("Nouveau Client", 0, "Bienvenue chez Sandwich du Roi ! Votre carte de fidélité est activée.", "#8B0000", "👑", 1, None, 0),
-        ("Bienvenue Prince", 1, "5% de réduction sur votre prochain achat", "#D4AF37", "🥉", 1, 50, 0),
-        ("Client Fidèle", 5, "10% de réduction + 1 sandwich offert", "#D4AF37", "🥈", 1, 150, 1),
-        ("Client Royal", 10, "15% de réduction + livraison gratuite", "#D4AF37", "🥇", 1, 250, 0),
-        ("Client Légendaire", 20, "20% de réduction + 2 sandwichs offerts", "#8B0000", "💎", 1, 350, 0),
+        ("Sujet du Royaume", 0, "Bienvenue dans ROYAL+ ! Votre premier achat vous ouvrira les portes de la noblesse.", "#8B0000", "🌱", 1, None, 0),
+        ("Noble", 2, "5% de réduction débloquée", "#D4AF37", "⚜️", 1, None, 1),
+        ("Baron / Baronne", 5, "10% de réduction", "#D4AF37", "🎖️", 1, None, 0),
+        ("Duc / Duchesse", 12, "Un sandwich offert", "#D4AF37", "🏰", 1, None, 0),
+        ("Prince / Princesse", 17, "Un menu offert", "#D4AF37", "🤴", 1, None, 0),
+        ("Roi / Reine", 25, "Privilège VIP : livraison gratuite + priorité de commande", "#8B0000", "👑", 1, None, 0),
+        ("Empereur / Impératrice", 32, "Récompense ultime : 2 menus offerts + statut permanent", "#8B0000", "🏆", 1, None, 0),
     ]
 
     cur.executemany("""
