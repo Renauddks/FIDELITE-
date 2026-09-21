@@ -570,6 +570,7 @@ def modifier_infos(lien_unique):
     nom = request.form.get("nom", client["nom"]).strip()
     prenom = request.form.get("prenom", client["prenom"]).strip()
     numero = request.form.get("numero", client["numero"])
+    lieu_livraison = request.form.get("lieu_livraison", client["lieu_livraison"] or "").strip()
     age_brut = request.form.get("age", "")
 
     age = client["age"]
@@ -592,9 +593,9 @@ def modifier_infos(lien_unique):
 
     db.execute(
         """UPDATE clients_fidelite
-           SET nom = ?, prenom = ?, numero = ?, age = ?, photo = ?, date_derniere_modification = ?
+           SET nom = ?, prenom = ?, numero = ?, age = ?, photo = ?, lieu_livraison = ?, date_derniere_modification = ?
            WHERE lien_unique = ?""",
-        (nom, prenom, numero, age, photo_chemin,
+        (nom, prenom, numero, age, photo_chemin, lieu_livraison,
          datetime.now().strftime("%Y-%m-%d %H:%M:%S"), lien_unique),
     )
     db.commit()

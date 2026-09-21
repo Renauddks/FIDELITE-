@@ -30,6 +30,7 @@ def creer_tables(conn):
             prenom TEXT NOT NULL,
             numero TEXT,
             age INTEGER,
+            lieu_livraison TEXT,
             nombre_achats INTEGER NOT NULL DEFAULT 0,
             score_points INTEGER NOT NULL DEFAULT 0,
             statut_actuel TEXT NOT NULL DEFAULT 'Bienvenue Prince',
@@ -37,6 +38,11 @@ def creer_tables(conn):
             date_derniere_modification TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
         )
     """)
+
+    # Migration douce pour une base créée avant l'ajout de ce champ
+    colonnes_clients = [c[1] for c in cur.execute("PRAGMA table_info(clients_fidelite)").fetchall()]
+    if "lieu_livraison" not in colonnes_clients:
+        cur.execute("ALTER TABLE clients_fidelite ADD COLUMN lieu_livraison TEXT")
 
     cur.execute("""
         CREATE TABLE IF NOT EXISTS niveaux_fidelite (
