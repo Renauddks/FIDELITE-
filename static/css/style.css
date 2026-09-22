@@ -278,6 +278,41 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
 .privilege-nom { font-weight: 700; font-size: 0.88rem; margin: 0 0 2px; }
 .privilege-detail { font-size: 0.78rem; color: #777; margin: 0; }
 
+/* -------- Missions -------- */
+.carte-missions {
+    background: var(--blanc);
+    border-radius: 18px;
+    box-shadow: var(--ombre);
+    padding: 20px;
+    margin-bottom: 16px;
+}
+.liste-missions { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.mission-item {
+    display: flex;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: var(--gris-clair);
+    border: 1px solid #eee;
+}
+.mission-icone { font-size: 1.5rem; }
+.mission-corps { flex: 1; }
+.mission-titre { font-weight: 700; font-size: 0.88rem; margin: 0 0 3px; display: flex; justify-content: space-between; gap: 6px; }
+.mission-points { color: var(--bordeaux); white-space: nowrap; }
+.mission-description { font-size: 0.78rem; color: #777; margin: 0 0 8px; }
+.mission-badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 10px;
+}
+.mission-badge-auto { background: #e8f4fb; color: #2f8fc4; }
+.mission-badge-attente { background: #fff3cd; color: #8a6d00; }
+.mission-auto { background: #f0f8fd; border-color: #cfe8f7; }
+.mission-validee { background: #e3f6e3; border-color: #c3e6c3; }
+.mission-attente { background: #fff8e6; border-color: #f0dca0; }
+
 /* -------- Mon historique -------- */
 .carte-historique {
     background: var(--blanc);
