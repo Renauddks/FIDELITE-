@@ -1,0 +1,107 @@
+{% extends "_base.html" %}
+{% block titre %}Missions{% endblock %}
+{% block contenu %}
+<a href="{{ url_for('admin_dashboard') }}" class="lien-retour">&larr; Retour au tableau de bord</a>
+
+<h1>Missions bonus</h1>
+
+<section class="carte-formulaire">
+    <h2>Demandes à valider</h2>
+    <div class="tableau-scroll">
+        <table class="tableau-clients">
+            <thead>
+                <tr>
+                    <th>Client</th>
+                    <th>Numéro</th>
+                    <th>Mission</th>
+                    <th>Points</th>
+                    <th>Date</th>
+                    <th>Statut</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for demande in demandes %}
+                <tr>
+                    <td>{{ demande.prenom }} {{ demande.nom }}</td>
+                    <td>{{ demande.numero or '—' }}</td>
+                    <td>{{ demande.icone }} {{ demande.titre }}</td>
+                    <td>{{ demande.points_recompense }}</td>
+                    <td>{{ demande.date_demande }}</td>
+                    <td>
+                        {% if demande.statut == 'en_attente' %}
+                            <span class="badge-statut badge-attente">En attente</span>
+                        {% elif demande.statut == 'validee' %}
+                            <span class="badge-statut badge-honore">Validée</span>
+                        {% else %}
+                            <span class="badge-statut">Rejetée</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if demande.statut == 'en_attente' %}
+                        <form method="POST" action="{{ url_for('valider_mission', completion_id=demande.id) }}" style="display:inline;">
+                            <button type="submit" class="bouton bouton-secondaire bouton-mini">✅ Valider</button>
+                        </form>
+                        <form method="POST" action="{{ url_for('rejeter_mission', completion_id=demande.id) }}" style="display:inline;">
+                            <button type="submit" class="bouton bouton-danger bouton-mini">❌ Rejeter</button>
+                        </form>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7" class="ligne-vide">Aucune demande pour le moment.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<section class="carte-formulaire">
+    <h2>Ajouter une mission</h2>
+    <form method="POST" action="{{ url_for('ajouter_mission') }}" class="formulaire-niveau">
+        <input type="text" name="titre" placeholder="Titre de la mission" required>
+        <input type="number" name="points_recompense" placeholder="Points offerts" min="1" required>
+        <input type="text" name="icone" placeholder="Icône (emoji)" maxlength="4" value="🎯">
+        <select name="type_mission">
+            <option value="manuelle">Manuelle (validée par vous)</option>
+            <option value="auto_retour">Automatique (retour rapide)</option>
+        </select>
+        <input type="number" name="seuil_jours" placeholder="Délai en jours (si automatique)" min="1">
+        <textarea name="description" placeholder="Description affichée au client" rows="2"></textarea>
+        <button type="submit" class="bouton bouton-principal">+ Ajouter</button>
+    </form>
+</section>
+
+<section class="liste-niveaux">
+    {% for mission in missions %}
+    <form method="POST" action="{{ url_for('modifier_mission', mission_id=mission.id) }}" class="carte-niveau">
+        <div class="carte-niveau-entete">
+            <input type="text" name="icone" value="{{ mission.icone }}" maxlength="4" class="champ-icone">
+        </div>
+        <label>Titre</label>
+        <input type="text" name="titre" value="{{ mission.titre }}" class="champ-nom-pleine-largeur">
+        <label>Description</label>
+        <textarea name="description" rows="2">{{ mission.description or '' }}</textarea>
+        <label>Points offerts</label>
+        <input type="number" name="points_recompense" value="{{ mission.points_recompense }}" min="1">
+        <label>Type</label>
+        <select name="type_mission">
+            <option value="manuelle" {% if mission.type_mission == 'manuelle' %}selected{% endif %}>Manuelle (validée par vous)</option>
+            <option value="auto_retour" {% if mission.type_mission == 'auto_retour' %}selected{% endif %}>Automatique (retour rapide)</option>
+        </select>
+        <label>Délai en jours (si automatique)</label>
+        <input type="number" name="seuil_jours" value="{{ mission.seuil_jours or '' }}" min="1">
+        <label class="case-actif">
+            <input type="checkbox" name="actif" {% if mission.actif %}checked{% endif %}>
+            Mission active
+        </label>
+        <div class="carte-niveau-actions">
+            <button type="submit" class="bouton bouton-secondaire bouton-mini">Enregistrer</button>
+            <button type="submit" formaction="{{ url_for('supprimer_mission', mission_id=mission.id) }}" class="bouton bouton-danger bouton-mini" data-confirmation="Supprimer la mission {{ mission.titre }} ?">Supprimer</button>
+        </div>
+    </form>
+    {% else %}
+    <p class="texte-aide">Aucune mission pour le moment.</p>
+    {% endfor %}
+</section>
+{% endblock %}

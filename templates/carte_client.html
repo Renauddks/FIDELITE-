@@ -12,6 +12,9 @@
     <button type="button" class="icone-nav" data-vue="privileges" onclick="changerVue('privileges')">
         <span class="icone-emoji">🎁</span><span>Privilèges</span>
     </button>
+    <button type="button" class="icone-nav" data-vue="missions" onclick="changerVue('missions')">
+        <span class="icone-emoji">🎯</span><span>Missions</span>
+    </button>
     <button type="button" class="icone-nav" data-vue="partage" onclick="changerVue('partage')">
         <span class="icone-emoji">🤝</span><span>Partager</span>
     </button>
@@ -182,6 +185,42 @@
         {% endif %}
 
         <p class="texte-aide">💡 Vos points de fidélité (indépendants de votre rang) s'échangent contre des articles dans l'onglet "🍔 Échanger".</p>
+    </div>
+</div>
+
+<!-- VUE : MISSIONS -->
+<div id="vue-missions" class="vue-section vue-cachee">
+    <div class="carte-missions">
+        <p class="titre-section">🎯 Missions bonus</p>
+        <p class="texte-aide">Réalisez ces petits défis entre deux achats pour gagner des points supplémentaires !</p>
+
+        <div class="liste-missions">
+            {% for mission in missions %}
+            <div class="mission-item {% if mission.type_mission == 'auto_retour' %}mission-auto{% elif mission.statut_client == 'validee' %}mission-validee{% elif mission.statut_client == 'en_attente' %}mission-attente{% endif %}">
+                <span class="mission-icone">{{ mission.icone }}</span>
+                <div class="mission-corps">
+                    <p class="mission-titre">{{ mission.titre }} <span class="mission-points">+{{ mission.points_recompense }} pts</span></p>
+                    <p class="mission-description">{{ mission.description }}</p>
+
+                    {% if mission.type_mission == 'auto_retour' %}
+                        <span class="mission-badge mission-badge-auto">⚡ Automatique</span>
+                    {% elif mission.statut_client == 'en_attente' %}
+                        <span class="mission-badge mission-badge-attente">⏳ En attente de validation</span>
+                    {% elif mission.statut_client == 'rejetee' %}
+                        <form method="POST" action="{{ url_for('soumettre_mission', lien_unique=client.lien_unique, mission_id=mission.id) }}">
+                            <button type="submit" class="bouton bouton-mini bouton-secondaire">Réessayer</button>
+                        </form>
+                    {% else %}
+                        <form method="POST" action="{{ url_for('soumettre_mission', lien_unique=client.lien_unique, mission_id=mission.id) }}">
+                            <button type="submit" class="bouton bouton-mini bouton-secondaire">J'ai réalisé cette mission</button>
+                        </form>
+                    {% endif %}
+                </div>
+            </div>
+            {% else %}
+            <p class="texte-verrouille">Aucune mission disponible pour le moment.</p>
+            {% endfor %}
+        </div>
     </div>
 </div>
 
