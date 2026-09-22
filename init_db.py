@@ -119,6 +119,32 @@ def creer_tables(conn):
     """)
 
     cur.execute("""
+        CREATE TABLE IF NOT EXISTS missions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            titre TEXT NOT NULL,
+            description TEXT,
+            points_recompense INTEGER NOT NULL,
+            type_mission TEXT NOT NULL DEFAULT 'manuelle',
+            seuil_jours INTEGER,
+            icone TEXT DEFAULT '🎯',
+            actif INTEGER NOT NULL DEFAULT 1
+        )
+    """)
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS missions_completees (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            client_id INTEGER NOT NULL,
+            mission_id INTEGER NOT NULL,
+            statut TEXT NOT NULL DEFAULT 'en_attente',
+            date_demande TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            date_validation TEXT,
+            FOREIGN KEY (client_id) REFERENCES clients_fidelite (id),
+            FOREIGN KEY (mission_id) REFERENCES missions (id)
+        )
+    """)
+
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS notifications (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             client_id INTEGER NOT NULL,
@@ -176,11 +202,34 @@ def seed_menu_echange(conn):
     conn.commit()
 
 
+def seed_missions(conn):
+    cur = conn.cursor()
+    cur.execute("SELECT COUNT(*) FROM missions")
+    if cur.fetchone()[0] > 0:
+        return  # déjà initialisé
+
+    missions_par_defaut = [
+        ("Statut Sandwich du Roi", "Partagez une photo de notre logo ou d'un de nos plats en statut WhatsApp pendant 24h", 30, "manuelle", None, "📸", 1),
+        ("Retour éclair", "Revenez dans les 7 jours suivant votre dernier achat — crédité automatiquement", 15, "auto_retour", 7, "⚡", 1),
+        ("Parrainage royal", "Parrainez un ami qui s'inscrit à ROYAL+", 30, "manuelle", None, "🤝", 1),
+        ("Avis 5 étoiles", "Laissez un avis 5 étoiles sur notre page (Google, Facebook...)", 25, "manuelle", None, "⭐", 1),
+        ("Explorateur du menu", "Goûtez un article que vous n'avez jamais commandé", 20, "manuelle", None, "🎲", 1),
+    ]
+
+    cur.executemany("""
+        INSERT INTO missions (titre, description, points_recompense, type_mission, seuil_jours, icone, actif)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, missions_par_defaut)
+
+    conn.commit()
+
+
 def main():
     conn = sqlite3.connect(DB_PATH)
     creer_tables(conn)
     seed_niveaux(conn)
     seed_menu_echange(conn)
+    seed_missions(conn)
     conn.close()
     print(f"Base de données FIDÉLITÉ+ prête : {DB_PATH}")
 

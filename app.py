@@ -79,6 +79,7 @@ def init_db_if_needed():
     init_db.creer_tables(conn)
     init_db.seed_niveaux(conn)
     init_db.seed_menu_echange(conn)
+    init_db.seed_missions(conn)
     conn.close()
 
 
@@ -193,6 +194,42 @@ def lien_whatsapp(numero, texte):
         return None
     from urllib.parse import quote
     return f"https://wa.me/{numero_propre}?text={quote(texte)}"
+
+
+def verifier_missions_auto_retour(db, client, date_achat_precedent):
+    """Vérifie et crédite automatiquement les missions de type 'retour rapide' après un nouvel achat."""
+    if not date_achat_precedent:
+        return  # premier achat du client : rien à comparer
+
+    try:
+        date_prec = datetime.strptime(date_achat_precedent, "%Y-%m-%d %H:%M:%S")
+    except (TypeError, ValueError):
+        return
+
+    jours_ecart = (datetime.now() - date_prec).days
+
+    missions_auto = db.execute(
+        "SELECT * FROM missions WHERE actif = 1 AND type_mission = 'auto_retour'"
+    ).fetchall()
+
+    solde_courant = client["score_points"]
+    for mission in missions_auto:
+        if mission["seuil_jours"] is not None and jours_ecart <= mission["seuil_jours"]:
+            db.execute(
+                "UPDATE clients_fidelite SET score_points = score_points + ? WHERE id = ?",
+                (mission["points_recompense"], client["id"]),
+            )
+            db.execute(
+                """INSERT INTO missions_completees (client_id, mission_id, statut, date_validation)
+                   VALUES (?, ?, 'validee', ?)""",
+                (client["id"], mission["id"], datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+            )
+            solde_courant += mission["points_recompense"]
+            notifier(
+                db, client["id"],
+                f"{mission['icone']} Mission « {mission['titre']} » réussie ! "
+                f"+{mission['points_recompense']} points. Nouveau solde : {solde_courant} points."
+            )
 
 
 def notifier(db, client_id, message):
@@ -379,6 +416,24 @@ def carte_client(lien_unique):
         "SELECT * FROM menu_echange WHERE actif = 1 ORDER BY cout_points ASC"
     ).fetchall()
 
+    missions_brutes = db.execute(
+        "SELECT * FROM missions WHERE actif = 1 ORDER BY type_mission DESC, points_recompense ASC"
+    ).fetchall()
+    missions_affichees = []
+    for m in missions_brutes:
+        statut_client = None
+        if m["type_mission"] == "manuelle":
+            derniere_demande = db.execute(
+                """SELECT * FROM missions_completees
+                   WHERE client_id = ? AND mission_id = ?
+                   ORDER BY date_demande DESC LIMIT 1""",
+                (client["id"], m["id"]),
+            ).fetchone()
+            statut_client = derniere_demande["statut"] if derniere_demande else None
+        m_dict = dict(m)
+        m_dict["statut_client"] = statut_client
+        missions_affichees.append(m_dict)
+
     notifications = db.execute(
         "SELECT * FROM notifications WHERE client_id = ? AND lu = 0 ORDER BY date_creation ASC",
         (client["id"],),
@@ -425,6 +480,7 @@ def carte_client(lien_unique):
         historique=historique,
         niveaux_debloques=niveaux_debloques,
         niveau_suivant_privilege=niveau_suivant_privilege,
+        missions=missions_affichees,
     )
 
 
@@ -562,6 +618,53 @@ def echanger_points(lien_unique):
     texte_whatsapp = (
         f"Bonjour Sandwich du Roi ! Je suis {client['prenom']} {client['nom']} ({client['numero']}). "
         f"Je souhaite échanger {produit['cout_points']} points contre : {produit['nom_produit']}. Merci de confirmer 🙏"
+    )
+    session["notification_whatsapp"] = {
+        "lien": lien_whatsapp(WHATSAPP_SANDWICH_DU_ROI, texte_whatsapp),
+        "nom_destinataire": "Sandwich du Roi",
+    }
+
+    return redirect(url_for("carte_client", lien_unique=lien_unique))
+
+
+@app.route("/carte/<lien_unique>/mission/<int:mission_id>/soumettre", methods=["POST"])
+def soumettre_mission(lien_unique, mission_id):
+    db = get_db()
+    client = db.execute(
+        "SELECT * FROM clients_fidelite WHERE lien_unique = ?", (lien_unique,)
+    ).fetchone()
+    if client is None:
+        abort(404)
+
+    mission = db.execute(
+        "SELECT * FROM missions WHERE id = ? AND actif = 1 AND type_mission = 'manuelle'",
+        (mission_id,),
+    ).fetchone()
+    if mission is None:
+        flash("Cette mission n'est plus disponible.", "danger")
+        return redirect(url_for("carte_client", lien_unique=lien_unique))
+
+    deja_en_attente = db.execute(
+        """SELECT 1 FROM missions_completees
+           WHERE client_id = ? AND mission_id = ? AND statut = 'en_attente'""",
+        (client["id"], mission_id),
+    ).fetchone()
+    if deja_en_attente:
+        flash("Cette mission est déjà en attente de validation.", "warning")
+        return redirect(url_for("carte_client", lien_unique=lien_unique))
+
+    db.execute(
+        """INSERT INTO missions_completees (client_id, mission_id, statut)
+           VALUES (?, ?, 'en_attente')""",
+        (client["id"], mission_id),
+    )
+    db.commit()
+
+    flash(f"🎯 Mission « {mission['titre']} » envoyée pour validation par Sandwich du Roi !", "success")
+
+    texte_whatsapp = (
+        f"Bonjour Sandwich du Roi ! Je suis {client['prenom']} {client['nom']} ({client['numero']}). "
+        f"J'ai réalisé la mission « {mission['titre']} » (+{mission['points_recompense']} points). Merci de valider 🙏"
     )
     session["notification_whatsapp"] = {
         "lien": lien_whatsapp(WHATSAPP_SANDWICH_DU_ROI, texte_whatsapp),
@@ -743,6 +846,11 @@ def ajouter_achat(client_id):
     except ValueError:
         points_ajoutes = 0
 
+    date_achat_precedent = db.execute(
+        "SELECT MAX(date_achat) AS derniere FROM historique_achats WHERE client_id = ?",
+        (client_id,),
+    ).fetchone()["derniere"]
+
     db.execute(
         """INSERT INTO historique_achats (client_id, montant, points_ajoutes, note)
            VALUES (?, ?, ?, ?)""",
@@ -762,6 +870,10 @@ def ajouter_achat(client_id):
     db.commit()
 
     maj_statut_client(db, client_id)
+
+    client_a_jour = db.execute("SELECT * FROM clients_fidelite WHERE id = ?", (client_id,)).fetchone()
+    verifier_missions_auto_retour(db, client_a_jour, date_achat_precedent)
+    db.commit()
 
     flash("Achat enregistré et carte mise à jour.", "success")
     return redirect(url_for("fiche_client", client_id=client_id))
@@ -1007,6 +1119,153 @@ def honorer_echange(echange_id):
 # ----------------------------------------------------------------------
 # ADMINISTRATION — MENU DE RÉCOMPENSES (échange de points)
 # ----------------------------------------------------------------------
+
+@app.route("/admin/missions")
+@admin_requis
+def gestion_missions():
+    db = get_db()
+    missions = db.execute("SELECT * FROM missions ORDER BY id ASC").fetchall()
+    demandes = db.execute(
+        """SELECT missions_completees.*, missions.titre, missions.points_recompense, missions.icone,
+                  clients_fidelite.nom, clients_fidelite.prenom, clients_fidelite.numero
+           FROM missions_completees
+           JOIN missions ON missions.id = missions_completees.mission_id
+           JOIN clients_fidelite ON clients_fidelite.id = missions_completees.client_id
+           ORDER BY
+               CASE WHEN missions_completees.statut = 'en_attente' THEN 0 ELSE 1 END,
+               missions_completees.date_demande DESC"""
+    ).fetchall()
+    return render_template("gestion_missions.html", missions=missions, demandes=demandes)
+
+
+@app.route("/admin/missions/ajouter", methods=["POST"])
+@admin_requis
+def ajouter_mission():
+    db = get_db()
+    titre = request.form.get("titre", "").strip()
+    description = request.form.get("description", "").strip()
+    points_brut = request.form.get("points_recompense", "0")
+    type_mission = request.form.get("type_mission", "manuelle")
+    seuil_jours_brut = request.form.get("seuil_jours", "").strip()
+    icone = request.form.get("icone", "🎯").strip() or "🎯"
+
+    if not titre:
+        flash("Le titre de la mission est obligatoire.", "danger")
+        return redirect(url_for("gestion_missions"))
+
+    try:
+        points = max(1, int(points_brut))
+    except ValueError:
+        points = 1
+
+    seuil_jours = int(seuil_jours_brut) if seuil_jours_brut.isdigit() else None
+
+    db.execute(
+        """INSERT INTO missions (titre, description, points_recompense, type_mission, seuil_jours, icone, actif)
+           VALUES (?, ?, ?, ?, ?, ?, 1)""",
+        (titre, description, points, type_mission, seuil_jours, icone),
+    )
+    db.commit()
+    flash("Mission ajoutée.", "success")
+    return redirect(url_for("gestion_missions"))
+
+
+@app.route("/admin/missions/modifier/<int:mission_id>", methods=["POST"])
+@admin_requis
+def modifier_mission(mission_id):
+    db = get_db()
+    mission = db.execute("SELECT * FROM missions WHERE id = ?", (mission_id,)).fetchone()
+    if mission is None:
+        abort(404)
+
+    titre = request.form.get("titre", mission["titre"]).strip()
+    description = request.form.get("description", mission["description"])
+    points_brut = request.form.get("points_recompense", str(mission["points_recompense"]))
+    type_mission = request.form.get("type_mission", mission["type_mission"])
+    seuil_jours_brut = request.form.get("seuil_jours", "").strip()
+    icone = request.form.get("icone", mission["icone"])
+    actif = 1 if request.form.get("actif") == "on" else 0
+
+    try:
+        points = max(1, int(points_brut))
+    except ValueError:
+        points = mission["points_recompense"]
+
+    seuil_jours = int(seuil_jours_brut) if seuil_jours_brut.isdigit() else None
+
+    db.execute(
+        """UPDATE missions
+           SET titre = ?, description = ?, points_recompense = ?, type_mission = ?,
+               seuil_jours = ?, icone = ?, actif = ?
+           WHERE id = ?""",
+        (titre, description, points, type_mission, seuil_jours, icone, actif, mission_id),
+    )
+    db.commit()
+    flash("Mission modifiée.", "success")
+    return redirect(url_for("gestion_missions"))
+
+
+@app.route("/admin/missions/supprimer/<int:mission_id>", methods=["POST"])
+@admin_requis
+def supprimer_mission(mission_id):
+    db = get_db()
+    db.execute("DELETE FROM missions WHERE id = ?", (mission_id,))
+    db.commit()
+    flash("Mission supprimée.", "warning")
+    return redirect(url_for("gestion_missions"))
+
+
+@app.route("/admin/missions/demande/<int:completion_id>/valider", methods=["POST"])
+@admin_requis
+def valider_mission(completion_id):
+    db = get_db()
+    demande = db.execute(
+        "SELECT * FROM missions_completees WHERE id = ?", (completion_id,)
+    ).fetchone()
+    if demande is None:
+        abort(404)
+
+    mission = db.execute("SELECT * FROM missions WHERE id = ?", (demande["mission_id"],)).fetchone()
+    client = db.execute("SELECT * FROM clients_fidelite WHERE id = ?", (demande["client_id"],)).fetchone()
+
+    if demande["statut"] != "en_attente" or mission is None or client is None:
+        flash("Cette demande a déjà été traitée.", "warning")
+        return redirect(url_for("gestion_missions"))
+
+    nouveau_solde = client["score_points"] + mission["points_recompense"]
+    db.execute(
+        "UPDATE clients_fidelite SET score_points = ?, date_derniere_modification = ? WHERE id = ?",
+        (nouveau_solde, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), client["id"]),
+    )
+    db.execute(
+        "UPDATE missions_completees SET statut = 'validee', date_validation = ? WHERE id = ?",
+        (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), completion_id),
+    )
+    notifier(
+        db, client["id"],
+        f"{mission['icone']} Mission « {mission['titre']} » validée ! "
+        f"+{mission['points_recompense']} points. Nouveau solde : {nouveau_solde} points."
+    )
+    db.commit()
+    flash("Mission validée, points crédités.", "success")
+    return redirect(url_for("gestion_missions"))
+
+
+@app.route("/admin/missions/demande/<int:completion_id>/rejeter", methods=["POST"])
+@admin_requis
+def rejeter_mission(completion_id):
+    db = get_db()
+    demande = db.execute("SELECT * FROM missions_completees WHERE id = ?", (completion_id,)).fetchone()
+    if demande is None:
+        abort(404)
+    db.execute(
+        "UPDATE missions_completees SET statut = 'rejetee', date_validation = ? WHERE id = ?",
+        (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), completion_id),
+    )
+    db.commit()
+    flash("Demande rejetée.", "warning")
+    return redirect(url_for("gestion_missions"))
+
 
 @app.route("/admin/menu-echange")
 @admin_requis
