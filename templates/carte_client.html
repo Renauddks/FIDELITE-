@@ -26,6 +26,23 @@
     </button>
 </div>
 
+{% if coffres_a_ouvrir %}
+<div class="bloc-coffres">
+    {% for coffre in coffres_a_ouvrir %}
+    <div class="coffre-royal">
+        <span class="coffre-icone">🔐</span>
+        <div class="coffre-corps">
+            <p class="coffre-titre">Un coffre royal vous attend !</p>
+            <p class="coffre-mission">{{ coffre.icone }} Quête « {{ coffre.titre }} » accomplie</p>
+        </div>
+        <form method="POST" action="{{ url_for('ouvrir_coffre', lien_unique=client.lien_unique, completion_id=coffre.completion_id) }}">
+            <button type="submit" class="bouton bouton-coffre">🔓 Ouvrir le coffre</button>
+        </form>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
 {% if notifications %}
 <div class="bloc-notifications">
     {% for notif in notifications %}
@@ -71,6 +88,13 @@
             <p class="alerte-degradation">
                 ⏳ Statut réduit pour inactivité ({{ jours_inactivite }} jours sans achat).
                 Un nouvel achat vous ramène immédiatement à votre rang de <strong>{{ niveau_acquis.nom_niveau }}</strong> !
+            </p>
+            {% endif %}
+
+            {% if alerte_preventive %}
+            <p class="alerte-preventive">
+                ⚠️ Plus que <strong>{{ alerte_preventive.jours_restants }} jour{{ 's' if alerte_preventive.jours_restants != 1 else '' }}</strong> pour garder votre rang de <strong>{{ niveau_effectif.nom_niveau }}</strong> —
+                un simple achat suffit ! Sans achat, vous redescendrez à <strong>{{ alerte_preventive.niveau_apres_perte.nom_niveau }}</strong>.
             </p>
             {% endif %}
 
@@ -120,34 +144,35 @@
                 </p>
             </div>
         </div>
-
-        <div class="carte-fidelite-parcours">
-            <p class="titre-section">🏰 Votre parcours</p>
-            <div class="parcours-royal">
-                {% for niveau in niveaux %}
-                    {% set atteint = client.nombre_achats >= niveau.nombre_achats_requis %}
-                    {% set courant = progression.niveau_actuel and niveau.id == progression.niveau_actuel.id %}
-                    <div class="parcours-etape {% if courant %}parcours-courant{% elif atteint %}parcours-atteint{% else %}parcours-verrouille{% endif %}">
-                        <div class="parcours-marqueur">
-                            <span class="parcours-icone">{{ niveau.icone }}</span>
-                            {% if courant %}<span class="parcours-pastille">📍</span>{% elif atteint %}<span class="parcours-pastille">✅</span>{% else %}<span class="parcours-pastille">🔒</span>{% endif %}
-                        </div>
-                        <button type="button" class="parcours-corps"
-                                onclick="ouvrirNiveau('{{ niveau.icone }} {{ niveau.nom_niveau|e }}', '{{ (niveau.avantages or 'Aucun avantage renseigné pour ce niveau.')|e }}')">
-                            <span class="parcours-nom">{{ niveau.nom_niveau }}{% if niveau_max and niveau.id == niveau_max.id %} 🎁{% endif %}</span>
-                            <span class="parcours-seuil">🎯 {{ niveau.nombre_achats_requis }} achat{{ 's' if niveau.nombre_achats_requis != 1 else '' }}</span>
-                            <span class="parcours-recompense">🎁 {{ niveau.avantages or 'Avantage à venir' }}</span>
-                        </button>
-                    </div>
-                    {% if not loop.last %}<div class="parcours-lien"></div>{% endif %}
-                {% endfor %}
-            </div>
-        </div>
     </div>
 </div>
 
 <!-- VUE : MES PRIVILÈGES -->
 <div id="vue-privileges" class="vue-section vue-cachee">
+
+    <div class="carte-privileges">
+        <p class="titre-section">🏰 Votre parcours</p>
+        <div class="parcours-royal">
+            {% for niveau in niveaux %}
+                {% set atteint = client.nombre_achats >= niveau.nombre_achats_requis %}
+                {% set courant = progression.niveau_actuel and niveau.id == progression.niveau_actuel.id %}
+                <div class="parcours-etape {% if courant %}parcours-courant{% elif atteint %}parcours-atteint{% else %}parcours-verrouille{% endif %}">
+                    <div class="parcours-marqueur">
+                        <span class="parcours-icone">{{ niveau.icone }}</span>
+                        {% if courant %}<span class="parcours-pastille">📍</span>{% elif atteint %}<span class="parcours-pastille">✅</span>{% else %}<span class="parcours-pastille">🔒</span>{% endif %}
+                    </div>
+                    <button type="button" class="parcours-corps"
+                            onclick="ouvrirNiveau('{{ niveau.icone }} {{ niveau.nom_niveau|e }}', '{{ (niveau.avantages or 'Aucun avantage renseigné pour ce niveau.')|e }}')">
+                        <span class="parcours-nom">{{ niveau.nom_niveau }}{% if niveau_min_partage and niveau.nombre_achats_requis >= niveau_min_partage.nombre_achats_requis %} 🎁{% endif %}</span>
+                        <span class="parcours-seuil">🎯 {{ niveau.nombre_achats_requis }} achat{{ 's' if niveau.nombre_achats_requis != 1 else '' }}</span>
+                        <span class="parcours-recompense">🎁 {{ niveau.avantages or 'Avantage à venir' }}</span>
+                    </button>
+                </div>
+                {% if not loop.last %}<div class="parcours-lien"></div>{% endif %}
+            {% endfor %}
+        </div>
+    </div>
+
     <div class="carte-privileges">
         <p class="titre-section">🎁 Mes privilèges</p>
 
@@ -196,7 +221,7 @@
 
         <div class="liste-missions">
             {% for mission in missions %}
-            <div class="mission-item {% if mission.type_mission == 'auto_retour' %}mission-auto{% elif mission.statut_client == 'validee' %}mission-validee{% elif mission.statut_client == 'en_attente' %}mission-attente{% endif %}">
+            <div class="mission-item {% if mission.type_mission == 'auto_retour' %}mission-auto{% elif mission.statut_client == 'validee' %}mission-validee{% elif mission.statut_client == 'en_attente' %}mission-attente{% elif mission.statut_client == 'en_cours' %}mission-encours{% endif %}">
                 <span class="mission-icone">{{ mission.icone }}</span>
                 <div class="mission-corps">
                     <p class="mission-titre">{{ mission.titre }} <span class="mission-points">+{{ mission.points_recompense }} pts</span></p>
@@ -204,15 +229,40 @@
 
                     {% if mission.type_mission == 'auto_retour' %}
                         <span class="mission-badge mission-badge-auto">⚡ Automatique</span>
+
+                    {% elif mission.statut_client == 'en_cours' %}
+                        {% if mission.duree_heures and mission.minutes_restantes and mission.minutes_restantes > 0 %}
+                            <div class="mission-progression">
+                                <div class="mission-barre">
+                                    <div class="mission-barre-remplissage" style="width: {{ mission.pourcentage_temps }}%;"></div>
+                                </div>
+                                <p class="mission-temps">⏳ Encore {{ (mission.minutes_restantes // 60) }}h{{ '%02d'|format(mission.minutes_restantes % 60) }} avant de pouvoir envoyer votre preuve</p>
+                            </div>
+                        {% else %}
+                            <form method="POST" action="{{ url_for('soumettre_mission', lien_unique=client.lien_unique, mission_id=mission.id) }}" enctype="multipart/form-data" class="formulaire-preuve-mission">
+                                <label>📤 Capture d'écran de preuve</label>
+                                <input type="file" name="preuve_photo" accept="image/*" required>
+                                <button type="submit" class="bouton bouton-mini bouton-secondaire">Envoyer ma preuve</button>
+                            </form>
+                        {% endif %}
+
                     {% elif mission.statut_client == 'en_attente' %}
                         <span class="mission-badge mission-badge-attente">⏳ En attente de validation</span>
+
                     {% elif mission.statut_client == 'rejetee' %}
-                        <form method="POST" action="{{ url_for('soumettre_mission', lien_unique=client.lien_unique, mission_id=mission.id) }}">
-                            <button type="submit" class="bouton bouton-mini bouton-secondaire">Réessayer</button>
+                        <form method="POST" action="{{ url_for('demarrer_mission', lien_unique=client.lien_unique, mission_id=mission.id) }}">
+                            <button type="submit" class="bouton bouton-mini bouton-secondaire">🔁 Recommencer</button>
                         </form>
+
+                    {% elif mission.statut_client == 'validee' %}
+                        <span class="mission-badge mission-badge-validee">✅ Réalisée</span>
+                        <form method="POST" action="{{ url_for('demarrer_mission', lien_unique=client.lien_unique, mission_id=mission.id) }}">
+                            <button type="submit" class="bouton bouton-mini bouton-clair">🔁 Refaire cette mission</button>
+                        </form>
+
                     {% else %}
-                        <form method="POST" action="{{ url_for('soumettre_mission', lien_unique=client.lien_unique, mission_id=mission.id) }}">
-                            <button type="submit" class="bouton bouton-mini bouton-secondaire">J'ai réalisé cette mission</button>
+                        <form method="POST" action="{{ url_for('demarrer_mission', lien_unique=client.lien_unique, mission_id=mission.id) }}">
+                            <button type="submit" class="bouton bouton-mini bouton-secondaire">🚀 Démarrer la mission</button>
                         </form>
                     {% endif %}
                 </div>
@@ -239,7 +289,7 @@
             </form>
         {% else %}
             <p class="texte-verrouille">
-                🔒 Réservé aux clients du rang <strong>{{ niveau_max.nom_niveau if niveau_max else '—' }}</strong> (le rang le plus élevé).
+                🔒 Réservé aux clients à partir du rang <strong>{{ niveau_min_partage.nom_niveau if niveau_min_partage else '—' }}</strong>.
                 Continuez vos achats pour l'atteindre et débloquer le partage de points !
             </p>
         {% endif %}
