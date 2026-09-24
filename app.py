@@ -33,6 +33,7 @@ from werkzeug.utils import secure_filename
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(BASE_DIR, "fidelite.db")
 UPLOAD_FOLDER = os.path.join(BASE_DIR, "static", "uploads")
+UPLOAD_FOLDER_MISSIONS = os.path.join(BASE_DIR, "static", "uploads", "missions")
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
 MAX_CONTENT_LENGTH = 5 * 1024 * 1024  # 5 Mo max par photo
 
@@ -46,6 +47,7 @@ app.config["MAX_CONTENT_LENGTH"] = MAX_CONTENT_LENGTH
 
 # Git ne conserve pas les dossiers vides : on le recrée nous-mêmes si absent
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+os.makedirs(UPLOAD_FOLDER_MISSIONS, exist_ok=True)
 
 COULEUR_OR = "#D4AF37"
 COULEUR_BORDEAUX = "#8B0000"
@@ -220,16 +222,11 @@ def verifier_missions_auto_retour(db, client, date_achat_precedent):
                 (mission["points_recompense"], client["id"]),
             )
             db.execute(
-                """INSERT INTO missions_completees (client_id, mission_id, statut, date_validation)
-                   VALUES (?, ?, 'validee', ?)""",
+                """INSERT INTO missions_completees (client_id, mission_id, statut, date_validation, coffre_ouvert)
+                   VALUES (?, ?, 'validee', ?, 0)""",
                 (client["id"], mission["id"], datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
             )
             solde_courant += mission["points_recompense"]
-            notifier(
-                db, client["id"],
-                f"{mission['icone']} Mission « {mission['titre']} » réussie ! "
-                f"+{mission['points_recompense']} points. Nouveau solde : {solde_courant} points."
-            )
 
 
 def notifier(db, client_id, message):
@@ -263,54 +260,79 @@ def get_niveau_plancher(db):
     ).fetchone()
 
 
+JOURS_AVANT_ALERTE_PREVENTIVE = 10  # nombre de jours avant la perte d'un palier où l'on prévient le client
+
+
 def get_statut_effectif(db, client):
     """
-    Renvoie (niveau_effectif, niveau_acquis, jours_inactivite, statut_degrade).
+    Renvoie (niveau_effectif, niveau_acquis, jours_inactivite, statut_degrade, alerte_preventive).
     Le niveau acquis (basé sur nombre_achats) ne change jamais.
     Le niveau effectif redescend d'un palier tous les 30 jours sans achat,
-    jusqu'au niveau plancher (Client Fidèle par défaut) — puis se stabilise.
+    jusqu'au niveau plancher (Noble par défaut) — puis se stabilise.
     Un nouvel achat restaure immédiatement le niveau acquis (l'inactivité repart à zéro).
+    alerte_preventive est un dict {jours_restants, niveau_apres_perte} si le client approche
+    (à 10 jours ou moins) d'une nouvelle perte de palier, sinon None.
     """
     niveaux = get_niveaux_actifs(db)
     niveau_acquis = get_niveau_actuel_row(db, client["nombre_achats"])
     if not niveaux or niveau_acquis is None:
-        return niveau_acquis, niveau_acquis, 0, False
+        return niveau_acquis, niveau_acquis, 0, False, None
 
     derniere_date = get_derniere_date_achat(db, client)
     jours_inactivite = max(0, (datetime.now() - derniere_date).days)
     paliers_recul = jours_inactivite // JOURS_PAR_PALIER_INACTIVITE
 
-    if paliers_recul == 0:
-        return niveau_acquis, niveau_acquis, jours_inactivite, False
-
     index_acquis = next((i for i, n in enumerate(niveaux) if n["id"] == niveau_acquis["id"]), 0)
-
     plancher = get_niveau_plancher(db)
     index_plancher = 0
     if plancher:
         index_plancher = next((i for i, n in enumerate(niveaux) if n["id"] == plancher["id"]), 0)
 
-    nouvel_index = max(index_plancher, index_acquis - paliers_recul)
-    niveau_effectif = niveaux[nouvel_index]
-    statut_degrade = niveau_effectif["id"] != niveau_acquis["id"]
+    if paliers_recul == 0:
+        niveau_effectif = niveau_acquis
+        statut_degrade = False
+    else:
+        nouvel_index = max(index_plancher, index_acquis - paliers_recul)
+        niveau_effectif = niveaux[nouvel_index]
+        statut_degrade = niveau_effectif["id"] != niveau_acquis["id"]
 
-    return niveau_effectif, niveau_acquis, jours_inactivite, statut_degrade
+    # Alerte préventive : encore quelque chose à perdre et échéance proche ?
+    alerte_preventive = None
+    index_effectif = next((i for i, n in enumerate(niveaux) if n["id"] == niveau_effectif["id"]), 0)
+    if index_effectif > index_plancher:
+        prochain_seuil_jours = (paliers_recul + 1) * JOURS_PAR_PALIER_INACTIVITE
+        jours_restants = prochain_seuil_jours - jours_inactivite
+        if 0 < jours_restants <= JOURS_AVANT_ALERTE_PREVENTIVE:
+            alerte_preventive = {
+                "jours_restants": jours_restants,
+                "niveau_apres_perte": niveaux[index_effectif - 1],
+            }
+
+    return niveau_effectif, niveau_acquis, jours_inactivite, statut_degrade, alerte_preventive
 
 
 def get_niveau_max(db):
-    """Renvoie le niveau actif le plus élevé (le « niveau 5 », quel que soit son nom)."""
+    """Renvoie le niveau actif le plus élevé (utilisé pour l'affichage, indépendant du déblocage du partage)."""
     return db.execute(
         "SELECT * FROM niveaux_fidelite WHERE actif = 1 ORDER BY nombre_achats_requis DESC LIMIT 1"
     ).fetchone()
 
 
+def get_niveau_min_partage(db):
+    """Renvoie le niveau minimum (le plus accessible) à partir duquel le partage de points est débloqué."""
+    return db.execute(
+        "SELECT * FROM niveaux_fidelite WHERE debloque_partage = 1 AND actif = 1 ORDER BY nombre_achats_requis ASC LIMIT 1"
+    ).fetchone()
+
+
 def client_peut_partager(db, client):
-    """Le partage entre clients est réservé au niveau le plus élevé, en tenant compte de la dégradation par inactivité."""
-    niveau_effectif, _, _, _ = get_statut_effectif(db, client)
-    niveau_max = get_niveau_max(db)
-    if niveau_effectif is None or niveau_max is None:
+    """Le partage entre clients est débloqué à partir d'un niveau minimum désigné (Prince/Princesse par défaut),
+    en tenant compte de la dégradation par inactivité (basé sur le niveau EFFECTIF)."""
+    niveau_effectif, _, _, _, _ = get_statut_effectif(db, client)
+    niveau_min = get_niveau_min_partage(db)
+    if niveau_effectif is None or niveau_min is None:
         return False
-    return niveau_effectif["id"] == niveau_max["id"]
+    return niveau_effectif["nombre_achats_requis"] >= niveau_min["nombre_achats_requis"]
 
 
 def maj_statut_client(db, client_id):
@@ -346,6 +368,20 @@ def enregistrer_photo(fichier, lien_unique):
     chemin_absolu = os.path.join(UPLOAD_FOLDER, nom_final)
     fichier.save(chemin_absolu)
     return f"uploads/{nom_final}"
+
+
+def enregistrer_preuve_mission(fichier, completion_id):
+    """Sauvegarde la capture d'écran envoyée comme preuve de mission."""
+    if not fichier or fichier.filename == "":
+        return None
+    if not fichier_autorise(fichier.filename):
+        flash("Format d'image non autorisé (formats acceptés : jpg, jpeg, png, gif, webp).", "danger")
+        return None
+    extension = fichier.filename.rsplit(".", 1)[1].lower()
+    nom_final = secure_filename(f"preuve-{completion_id}.{extension}")
+    chemin_absolu = os.path.join(UPLOAD_FOLDER_MISSIONS, nom_final)
+    fichier.save(chemin_absolu)
+    return f"uploads/missions/{nom_final}"
 
 
 # ----------------------------------------------------------------------
@@ -410,7 +446,8 @@ def carte_client(lien_unique):
 
     peut_partager = client_peut_partager(db, client)
     niveau_max = get_niveau_max(db)
-    niveau_effectif, niveau_acquis, jours_inactivite, statut_degrade = get_statut_effectif(db, client)
+    niveau_min_partage = get_niveau_min_partage(db)
+    niveau_effectif, niveau_acquis, jours_inactivite, statut_degrade, alerte_preventive = get_statut_effectif(db, client)
 
     menu = db.execute(
         "SELECT * FROM menu_echange WHERE actif = 1 ORDER BY cout_points ASC"
@@ -420,18 +457,34 @@ def carte_client(lien_unique):
         "SELECT * FROM missions WHERE actif = 1 ORDER BY type_mission DESC, points_recompense ASC"
     ).fetchall()
     missions_affichees = []
+    maintenant = datetime.now()
     for m in missions_brutes:
-        statut_client = None
+        derniere_demande = None
         if m["type_mission"] == "manuelle":
             derniere_demande = db.execute(
                 """SELECT * FROM missions_completees
                    WHERE client_id = ? AND mission_id = ?
-                   ORDER BY date_demande DESC LIMIT 1""",
+                   ORDER BY COALESCE(date_debut, date_demande) DESC LIMIT 1""",
                 (client["id"], m["id"]),
             ).fetchone()
-            statut_client = derniere_demande["statut"] if derniere_demande else None
+
         m_dict = dict(m)
-        m_dict["statut_client"] = statut_client
+        m_dict["statut_client"] = derniere_demande["statut"] if derniere_demande else None
+        m_dict["preuve_photo"] = derniere_demande["preuve_photo"] if derniere_demande else None
+
+        # Progression pour les missions minutées, en cours
+        m_dict["minutes_restantes"] = None
+        m_dict["pourcentage_temps"] = None
+        if derniere_demande and derniere_demande["statut"] == "en_cours" and m["duree_heures"] and derniere_demande["date_debut"]:
+            try:
+                debut = datetime.strptime(derniere_demande["date_debut"], "%Y-%m-%d %H:%M:%S")
+                ecoule_min = (maintenant - debut).total_seconds() / 60
+                duree_min = m["duree_heures"] * 60
+                m_dict["minutes_restantes"] = max(0, round(duree_min - ecoule_min))
+                m_dict["pourcentage_temps"] = int(min(100, max(0, ecoule_min / duree_min * 100)))
+            except (TypeError, ValueError):
+                pass
+
         missions_affichees.append(m_dict)
 
     notifications = db.execute(
@@ -446,6 +499,16 @@ def carte_client(lien_unique):
         db.commit()
 
     notification_whatsapp = session.pop("notification_whatsapp", None)
+
+    coffres_a_ouvrir = db.execute(
+        """SELECT missions_completees.id AS completion_id, missions.titre, missions.icone
+           FROM missions_completees
+           JOIN missions ON missions.id = missions_completees.mission_id
+           WHERE missions_completees.client_id = ? AND missions_completees.statut = 'validee'
+                 AND missions_completees.coffre_ouvert = 0
+           ORDER BY missions_completees.date_validation ASC""",
+        (client["id"],),
+    ).fetchall()
 
     historique = db.execute(
         """SELECT * FROM historique_achats
@@ -469,14 +532,17 @@ def carte_client(lien_unique):
         couleur_vert=COULEUR_VERT,
         peut_partager=peut_partager,
         niveau_max=niveau_max,
+        niveau_min_partage=niveau_min_partage,
         menu=menu,
         cartes_completees=cartes_completees,
         niveau_effectif=niveau_effectif,
         niveau_acquis=niveau_acquis,
         jours_inactivite=jours_inactivite,
         statut_degrade=statut_degrade,
+        alerte_preventive=alerte_preventive,
         notifications=notifications,
         notification_whatsapp=notification_whatsapp,
+        coffres_a_ouvrir=coffres_a_ouvrir,
         historique=historique,
         niveaux_debloques=niveaux_debloques,
         niveau_suivant_privilege=niveau_suivant_privilege,
@@ -627,6 +693,82 @@ def echanger_points(lien_unique):
     return redirect(url_for("carte_client", lien_unique=lien_unique))
 
 
+@app.route("/carte/<lien_unique>/coffre/<int:completion_id>/ouvrir", methods=["POST"])
+def ouvrir_coffre(lien_unique, completion_id):
+    db = get_db()
+    client = db.execute(
+        "SELECT * FROM clients_fidelite WHERE lien_unique = ?", (lien_unique,)
+    ).fetchone()
+    if client is None:
+        abort(404)
+
+    completion = db.execute(
+        """SELECT * FROM missions_completees
+           WHERE id = ? AND client_id = ? AND statut = 'validee' AND coffre_ouvert = 0""",
+        (completion_id, client["id"]),
+    ).fetchone()
+    if completion is None:
+        flash("Ce coffre n'est plus disponible.", "warning")
+        return redirect(url_for("carte_client", lien_unique=lien_unique))
+
+    mission = db.execute("SELECT * FROM missions WHERE id = ?", (completion["mission_id"],)).fetchone()
+
+    db.execute(
+        "UPDATE missions_completees SET coffre_ouvert = 1 WHERE id = ?", (completion_id,)
+    )
+
+    if mission is not None:
+        notifier(
+            db, client["id"],
+            f"🎉 Félicitations ! Le coffre de la mission {mission['icone']} « {mission['titre']} » "
+            f"révèle +{mission['points_recompense']} points ! Nouveau solde : {client['score_points']} points."
+        )
+    db.commit()
+
+    return redirect(url_for("carte_client", lien_unique=lien_unique))
+
+
+@app.route("/carte/<lien_unique>/mission/<int:mission_id>/demarrer", methods=["POST"])
+def demarrer_mission(lien_unique, mission_id):
+    db = get_db()
+    client = db.execute(
+        "SELECT * FROM clients_fidelite WHERE lien_unique = ?", (lien_unique,)
+    ).fetchone()
+    if client is None:
+        abort(404)
+
+    mission = db.execute(
+        "SELECT * FROM missions WHERE id = ? AND actif = 1 AND type_mission = 'manuelle'",
+        (mission_id,),
+    ).fetchone()
+    if mission is None:
+        flash("Cette mission n'est plus disponible.", "danger")
+        return redirect(url_for("carte_client", lien_unique=lien_unique))
+
+    en_cours_ou_attente = db.execute(
+        """SELECT 1 FROM missions_completees
+           WHERE client_id = ? AND mission_id = ? AND statut IN ('en_cours', 'en_attente')""",
+        (client["id"], mission_id),
+    ).fetchone()
+    if en_cours_ou_attente:
+        flash("Cette mission est déjà en cours.", "warning")
+        return redirect(url_for("carte_client", lien_unique=lien_unique))
+
+    db.execute(
+        """INSERT INTO missions_completees (client_id, mission_id, statut, date_debut)
+           VALUES (?, ?, 'en_cours', ?)""",
+        (client["id"], mission_id, datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+    )
+    db.commit()
+
+    if mission["duree_heures"]:
+        flash(f"🚀 Mission « {mission['titre']} » démarrée ! Revenez dans {mission['duree_heures']}h pour envoyer votre preuve.", "success")
+    else:
+        flash(f"🚀 Mission « {mission['titre']} » démarrée ! Vous pouvez envoyer votre preuve dès maintenant.", "success")
+
+    return redirect(url_for("carte_client", lien_unique=lien_unique))
+
+
 @app.route("/carte/<lien_unique>/mission/<int:mission_id>/soumettre", methods=["POST"])
 def soumettre_mission(lien_unique, mission_id):
     db = get_db()
@@ -644,27 +786,35 @@ def soumettre_mission(lien_unique, mission_id):
         flash("Cette mission n'est plus disponible.", "danger")
         return redirect(url_for("carte_client", lien_unique=lien_unique))
 
-    deja_en_attente = db.execute(
-        """SELECT 1 FROM missions_completees
-           WHERE client_id = ? AND mission_id = ? AND statut = 'en_attente'""",
+    demande_en_cours = db.execute(
+        """SELECT * FROM missions_completees
+           WHERE client_id = ? AND mission_id = ? AND statut = 'en_cours'
+           ORDER BY date_debut DESC LIMIT 1""",
         (client["id"], mission_id),
     ).fetchone()
-    if deja_en_attente:
-        flash("Cette mission est déjà en attente de validation.", "warning")
+    if demande_en_cours is None:
+        flash("Démarrez d'abord la mission avant d'envoyer votre preuve.", "danger")
+        return redirect(url_for("carte_client", lien_unique=lien_unique))
+
+    fichier = request.files.get("preuve_photo")
+    chemin_preuve = enregistrer_preuve_mission(fichier, demande_en_cours["id"])
+    if not chemin_preuve:
+        flash("Merci de joindre une capture d'écran comme preuve.", "danger")
         return redirect(url_for("carte_client", lien_unique=lien_unique))
 
     db.execute(
-        """INSERT INTO missions_completees (client_id, mission_id, statut)
-           VALUES (?, ?, 'en_attente')""",
-        (client["id"], mission_id),
+        """UPDATE missions_completees
+           SET statut = 'en_attente', preuve_photo = ?, date_demande = ?
+           WHERE id = ?""",
+        (chemin_preuve, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), demande_en_cours["id"]),
     )
     db.commit()
 
-    flash(f"🎯 Mission « {mission['titre']} » envoyée pour validation par Sandwich du Roi !", "success")
+    flash(f"🎯 Preuve envoyée ! Mission « {mission['titre']} » en attente de validation par Sandwich du Roi.", "success")
 
     texte_whatsapp = (
         f"Bonjour Sandwich du Roi ! Je suis {client['prenom']} {client['nom']} ({client['numero']}). "
-        f"J'ai réalisé la mission « {mission['titre']} » (+{mission['points_recompense']} points). Merci de valider 🙏"
+        f"J'ai réalisé la mission « {mission['titre']} » (+{mission['points_recompense']} points) et envoyé ma preuve dans l'appli. Merci de vérifier et valider 🙏"
     )
     session["notification_whatsapp"] = {
         "lien": lien_whatsapp(WHATSAPP_SANDWICH_DU_ROI, texte_whatsapp),
@@ -746,7 +896,7 @@ def admin_dashboard():
 
     clients_enrichis = []
     for c in clients:
-        niveau_effectif, _, _, statut_degrade = get_statut_effectif(db, c)
+        niveau_effectif, _, _, statut_degrade, _ = get_statut_effectif(db, c)
         c_dict = dict(c)
         c_dict["statut_effectif"] = niveau_effectif["nom_niveau"] if niveau_effectif else c["statut_actuel"]
         c_dict["statut_degrade"] = statut_degrade
@@ -815,11 +965,12 @@ def fiche_client(client_id):
         (client_id,),
     ).fetchall()
     niveaux = get_niveaux_actifs(db)
-    niveau_effectif, niveau_acquis, jours_inactivite, statut_degrade = get_statut_effectif(db, client)
+    niveau_effectif, niveau_acquis, jours_inactivite, statut_degrade, alerte_preventive = get_statut_effectif(db, client)
     return render_template(
         "fiche_client.html", client=client, historique=historique, niveaux=niveaux,
         niveau_effectif=niveau_effectif, niveau_acquis=niveau_acquis,
         jours_inactivite=jours_inactivite, statut_degrade=statut_degrade,
+        alerte_preventive=alerte_preventive,
     )
 
 
@@ -1044,6 +1195,7 @@ def modifier_niveau(niveau_id):
     seuil_partage_brut = request.form.get("seuil_partage_points", "").strip()
     seuil_partage = int(seuil_partage_brut) if seuil_partage_brut.isdigit() else None
     palier_plancher = 1 if request.form.get("palier_plancher") == "on" else 0
+    debloque_partage = 1 if request.form.get("debloque_partage") == "on" else 0
 
     try:
         seuil = max(0, int(seuil_brut))
@@ -1053,13 +1205,16 @@ def modifier_niveau(niveau_id):
     if palier_plancher:
         # Un seul niveau plancher à la fois : on retire le statut des autres
         db.execute("UPDATE niveaux_fidelite SET palier_plancher = 0 WHERE id != ?", (niveau_id,))
+    if debloque_partage:
+        # Un seul niveau de déblocage du partage à la fois
+        db.execute("UPDATE niveaux_fidelite SET debloque_partage = 0 WHERE id != ?", (niveau_id,))
 
     db.execute(
         """UPDATE niveaux_fidelite
            SET nom_niveau = ?, nombre_achats_requis = ?, avantages = ?,
-               couleur = ?, icone = ?, actif = ?, seuil_partage_points = ?, palier_plancher = ?
+               couleur = ?, icone = ?, actif = ?, seuil_partage_points = ?, palier_plancher = ?, debloque_partage = ?
            WHERE id = ?""",
-        (nom_niveau, seuil, avantages, couleur, icone, actif, seuil_partage, palier_plancher, niveau_id),
+        (nom_niveau, seuil, avantages, couleur, icone, actif, seuil_partage, palier_plancher, debloque_partage, niveau_id),
     )
     db.commit()
 
@@ -1238,16 +1393,11 @@ def valider_mission(completion_id):
         (nouveau_solde, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), client["id"]),
     )
     db.execute(
-        "UPDATE missions_completees SET statut = 'validee', date_validation = ? WHERE id = ?",
+        "UPDATE missions_completees SET statut = 'validee', date_validation = ?, coffre_ouvert = 0 WHERE id = ?",
         (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), completion_id),
     )
-    notifier(
-        db, client["id"],
-        f"{mission['icone']} Mission « {mission['titre']} » validée ! "
-        f"+{mission['points_recompense']} points. Nouveau solde : {nouveau_solde} points."
-    )
     db.commit()
-    flash("Mission validée, points crédités.", "success")
+    flash("Mission validée, points crédités. Le client pourra ouvrir son coffre royal.", "success")
     return redirect(url_for("gestion_missions"))
 
 
@@ -1258,10 +1408,17 @@ def rejeter_mission(completion_id):
     demande = db.execute("SELECT * FROM missions_completees WHERE id = ?", (completion_id,)).fetchone()
     if demande is None:
         abort(404)
+    mission = db.execute("SELECT * FROM missions WHERE id = ?", (demande["mission_id"],)).fetchone()
     db.execute(
         "UPDATE missions_completees SET statut = 'rejetee', date_validation = ? WHERE id = ?",
         (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), completion_id),
     )
+    if mission is not None:
+        notifier(
+            db, demande["client_id"],
+            f"😕 Votre preuve pour la mission « {mission['titre']} » n'a pas été validée. "
+            f"Vous pouvez recommencer cette mission quand vous voulez !"
+        )
     db.commit()
     flash("Demande rejetée.", "warning")
     return redirect(url_for("gestion_missions"))

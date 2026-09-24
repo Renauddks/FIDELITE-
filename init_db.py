@@ -54,7 +54,8 @@ def creer_tables(conn):
             icone TEXT DEFAULT '🏆',
             actif INTEGER NOT NULL DEFAULT 1,
             seuil_partage_points INTEGER,
-            palier_plancher INTEGER NOT NULL DEFAULT 0
+            palier_plancher INTEGER NOT NULL DEFAULT 0,
+            debloque_partage INTEGER NOT NULL DEFAULT 0
         )
     """)
 
@@ -64,6 +65,8 @@ def creer_tables(conn):
         cur.execute("ALTER TABLE niveaux_fidelite ADD COLUMN seuil_partage_points INTEGER")
     if "palier_plancher" not in colonnes:
         cur.execute("ALTER TABLE niveaux_fidelite ADD COLUMN palier_plancher INTEGER NOT NULL DEFAULT 0")
+    if "debloque_partage" not in colonnes:
+        cur.execute("ALTER TABLE niveaux_fidelite ADD COLUMN debloque_partage INTEGER NOT NULL DEFAULT 0")
 
     cur.execute("""
         CREATE TABLE IF NOT EXISTS historique_achats (
@@ -126,10 +129,14 @@ def creer_tables(conn):
             points_recompense INTEGER NOT NULL,
             type_mission TEXT NOT NULL DEFAULT 'manuelle',
             seuil_jours INTEGER,
+            duree_heures INTEGER,
             icone TEXT DEFAULT '🎯',
             actif INTEGER NOT NULL DEFAULT 1
         )
     """)
+    colonnes_missions = [c[1] for c in cur.execute("PRAGMA table_info(missions)").fetchall()]
+    if "duree_heures" not in colonnes_missions:
+        cur.execute("ALTER TABLE missions ADD COLUMN duree_heures INTEGER")
 
     cur.execute("""
         CREATE TABLE IF NOT EXISTS missions_completees (
@@ -137,12 +144,21 @@ def creer_tables(conn):
             client_id INTEGER NOT NULL,
             mission_id INTEGER NOT NULL,
             statut TEXT NOT NULL DEFAULT 'en_attente',
+            date_debut TEXT,
+            preuve_photo TEXT,
             date_demande TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
             date_validation TEXT,
             FOREIGN KEY (client_id) REFERENCES clients_fidelite (id),
             FOREIGN KEY (mission_id) REFERENCES missions (id)
         )
     """)
+    colonnes_completees = [c[1] for c in cur.execute("PRAGMA table_info(missions_completees)").fetchall()]
+    if "date_debut" not in colonnes_completees:
+        cur.execute("ALTER TABLE missions_completees ADD COLUMN date_debut TEXT")
+    if "preuve_photo" not in colonnes_completees:
+        cur.execute("ALTER TABLE missions_completees ADD COLUMN preuve_photo TEXT")
+    if "coffre_ouvert" not in colonnes_completees:
+        cur.execute("ALTER TABLE missions_completees ADD COLUMN coffre_ouvert INTEGER NOT NULL DEFAULT 0")
 
     cur.execute("""
         CREATE TABLE IF NOT EXISTS notifications (
@@ -165,18 +181,18 @@ def seed_niveaux(conn):
         return  # déjà initialisé, on ne double pas les niveaux
 
     niveaux_par_defaut = [
-        ("Sujet du Royaume", 0, "Bienvenue dans ROYAL+ ! Votre premier achat vous ouvrira les portes de la noblesse.", "#8B0000", "🌱", 1, None, 0),
-        ("Noble", 2, "5% de réduction débloquée", "#D4AF37", "⚜️", 1, None, 1),
-        ("Baron / Baronne", 5, "10% de réduction", "#D4AF37", "🎖️", 1, None, 0),
-        ("Duc / Duchesse", 12, "Un sandwich offert", "#D4AF37", "🏰", 1, None, 0),
-        ("Prince / Princesse", 17, "Un menu offert", "#D4AF37", "🤴", 1, None, 0),
-        ("Roi / Reine", 25, "Privilège VIP : livraison gratuite + priorité de commande", "#8B0000", "👑", 1, None, 0),
-        ("Empereur / Impératrice", 32, "Récompense ultime : 2 menus offerts + statut permanent", "#8B0000", "🏆", 1, None, 0),
+        ("Sujet du Royaume", 0, "Bienvenue dans ROYAL+ ! Votre premier achat vous ouvrira les portes de la noblesse.", "#8B0000", "🌱", 1, None, 0, 0),
+        ("Noble", 2, "5% de réduction débloquée", "#D4AF37", "⚜️", 1, None, 1, 0),
+        ("Baron / Baronne", 5, "10% de réduction", "#D4AF37", "🎖️", 1, None, 0, 0),
+        ("Duc / Duchesse", 12, "Un sandwich offert", "#D4AF37", "🏰", 1, None, 0, 0),
+        ("Prince / Princesse", 17, "Un menu offert", "#D4AF37", "🤴", 1, None, 0, 1),
+        ("Roi / Reine", 25, "Privilège VIP : livraison gratuite + priorité de commande", "#8B0000", "👑", 1, None, 0, 0),
+        ("Empereur / Impératrice", 32, "Récompense ultime : 2 menus offerts + statut permanent", "#8B0000", "🏆", 1, None, 0, 0),
     ]
 
     cur.executemany("""
-        INSERT INTO niveaux_fidelite (nom_niveau, nombre_achats_requis, avantages, couleur, icone, actif, seuil_partage_points, palier_plancher)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO niveaux_fidelite (nom_niveau, nombre_achats_requis, avantages, couleur, icone, actif, seuil_partage_points, palier_plancher, debloque_partage)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, niveaux_par_defaut)
 
     conn.commit()
@@ -209,16 +225,16 @@ def seed_missions(conn):
         return  # déjà initialisé
 
     missions_par_defaut = [
-        ("Statut Sandwich du Roi", "Partagez une photo de notre logo ou d'un de nos plats en statut WhatsApp pendant 24h", 30, "manuelle", None, "📸", 1),
-        ("Retour éclair", "Revenez dans les 7 jours suivant votre dernier achat — crédité automatiquement", 15, "auto_retour", 7, "⚡", 1),
-        ("Parrainage royal", "Parrainez un ami qui s'inscrit à ROYAL+", 30, "manuelle", None, "🤝", 1),
-        ("Avis 5 étoiles", "Laissez un avis 5 étoiles sur notre page (Google, Facebook...)", 25, "manuelle", None, "⭐", 1),
-        ("Explorateur du menu", "Goûtez un article que vous n'avez jamais commandé", 20, "manuelle", None, "🎲", 1),
+        ("Statut Sandwich du Roi", "Partagez une photo de notre logo ou d'un de nos plats en statut WhatsApp pendant 24h, puis envoyez une capture d'écran", 30, "manuelle", None, 24, "📸", 1),
+        ("Retour éclair", "Revenez dans les 7 jours suivant votre dernier achat — crédité automatiquement", 15, "auto_retour", 7, None, "⚡", 1),
+        ("Parrainage royal", "Parrainez un ami qui s'inscrit à ROYAL+", 30, "manuelle", None, None, "🤝", 1),
+        ("Avis 5 étoiles", "Laissez un avis 5 étoiles sur notre page (Google, Facebook...) puis envoyez une capture d'écran", 25, "manuelle", None, None, "⭐", 1),
+        ("Explorateur du menu", "Goûtez un article que vous n'avez jamais commandé", 20, "manuelle", None, None, "🎲", 1),
     ]
 
     cur.executemany("""
-        INSERT INTO missions (titre, description, points_recompense, type_mission, seuil_jours, icone, actif)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO missions (titre, description, points_recompense, type_mission, seuil_jours, duree_heures, icone, actif)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """, missions_par_defaut)
 
     conn.commit()
