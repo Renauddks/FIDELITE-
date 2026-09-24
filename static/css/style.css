@@ -309,9 +309,29 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
 }
 .mission-badge-auto { background: #e8f4fb; color: #2f8fc4; }
 .mission-badge-attente { background: #fff3cd; color: #8a6d00; }
+.mission-badge-validee { background: #e3f6e3; color: #256029; }
 .mission-auto { background: #f0f8fd; border-color: #cfe8f7; }
 .mission-validee { background: #e3f6e3; border-color: #c3e6c3; }
 .mission-attente { background: #fff8e6; border-color: #f0dca0; }
+.mission-encours { background: #fdf0e5; border-color: #f0c99a; }
+
+.mission-progression { margin-top: 4px; }
+.mission-barre {
+    height: 10px;
+    background: var(--gris-clair);
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #eee;
+}
+.mission-barre-remplissage {
+    height: 100%;
+    background: linear-gradient(90deg, var(--or), var(--bordeaux));
+    transition: width 0.6s ease;
+}
+.mission-temps { font-size: 0.74rem; color: #8a5a2b; margin: 6px 0 0; }
+
+.formulaire-preuve-mission { margin-top: 6px; }
+.formulaire-preuve-mission input[type="file"] { font-size: 0.78rem; padding: 6px; margin-bottom: 6px; }
 
 /* -------- Mon historique -------- */
 .carte-historique {
@@ -592,6 +612,40 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
 .bouton-echange { background: #2f8fc4; color: var(--blanc); width: 100%; margin-top: 6px; }
 .bouton-echange:hover { background: #256f9c; }
 
+.bloc-coffres {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+.coffre-royal {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: linear-gradient(135deg, var(--bordeaux), var(--bordeaux-fonce));
+    border: 2px solid var(--or);
+    border-radius: 16px;
+    padding: 14px 16px;
+    box-shadow: 0 4px 14px rgba(139, 0, 0, 0.35);
+    animation: pulsation-coffre 2s ease-in-out infinite;
+}
+@keyframes pulsation-coffre {
+    0%, 100% { box-shadow: 0 4px 14px rgba(139, 0, 0, 0.35); }
+    50% { box-shadow: 0 4px 22px rgba(212, 175, 55, 0.65); }
+}
+.coffre-icone { font-size: 2rem; flex-shrink: 0; }
+.coffre-corps { flex: 1; min-width: 0; }
+.coffre-titre { color: var(--or); font-weight: 800; font-size: 0.92rem; margin: 0 0 2px; }
+.coffre-mission { color: var(--blanc); font-size: 0.76rem; margin: 0; opacity: 0.9; }
+.bouton-coffre {
+    background: var(--or);
+    color: var(--bordeaux-fonce);
+    font-weight: 800;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.bouton-coffre:hover { background: var(--or-clair); }
+
 .bloc-notifications {
     margin: 16px 20px 0;
     display: flex;
@@ -626,6 +680,7 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
 .bouton-whatsapp:hover { background: #1ebe57; }
 
 .badge-attente { background: #fff3cd; color: #8a6d00; }
+.miniature-preuve { width: 48px; height: 48px; object-fit: cover; border-radius: 8px; border: 1px solid #ddd; }
 .badge-honore { background: #d4edda; color: #256029; }
 
 /* -------- Modales -------- */
