@@ -5,11 +5,8 @@ Indépendante de la base de données de SANDWICH_DU_ROI_APP.
 Utilisation :
     python init_db.py
 
-Crée le fichier fidelite.db avec 3 tables :
-    - clients_fidelite
-    - niveaux_fidelite
-    - historique_achats
-Et pré-remplit 5 niveaux de fidélité par défaut.
+Crée le fichier fidelite.db avec toutes les tables nécessaires et
+pré-remplit les niveaux, le menu de récompenses et les missions par défaut.
 """
 
 import sqlite3
@@ -39,7 +36,6 @@ def creer_tables(conn):
         )
     """)
 
-    # Migration douce pour une base créée avant l'ajout de ce champ
     colonnes_clients = [c[1] for c in cur.execute("PRAGMA table_info(clients_fidelite)").fetchall()]
     if "lieu_livraison" not in colonnes_clients:
         cur.execute("ALTER TABLE clients_fidelite ADD COLUMN lieu_livraison TEXT")
@@ -59,7 +55,7 @@ def creer_tables(conn):
         )
     """)
 
-    # Migration douce pour une base créée avant l'ajout de cette colonne
+    # Migrations douces pour une base créée avant l'ajout de ces colonnes
     colonnes = [c[1] for c in cur.execute("PRAGMA table_info(niveaux_fidelite)").fetchall()]
     if "seuil_partage_points" not in colonnes:
         cur.execute("ALTER TABLE niveaux_fidelite ADD COLUMN seuil_partage_points INTEGER")
@@ -96,20 +92,28 @@ def creer_tables(conn):
         CREATE TABLE IF NOT EXISTS echanges_points (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             client_id INTEGER NOT NULL,
+            client_actuel_id INTEGER,
             points_echanges INTEGER NOT NULL,
             nombre_bons INTEGER NOT NULL,
             statut TEXT NOT NULL DEFAULT 'en_attente',
+            code_unique TEXT,
             date_demande TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
             date_traitement TEXT,
             produit_nom TEXT,
-            FOREIGN KEY (client_id) REFERENCES clients_fidelite (id)
+            FOREIGN KEY (client_id) REFERENCES clients_fidelite (id),
+            FOREIGN KEY (client_actuel_id) REFERENCES clients_fidelite (id)
         )
     """)
 
-    # Migration douce si la table existait déjà sans cette colonne
+    # Migration douce si la table existait déjà sans ces colonnes
     colonnes_echanges = [c[1] for c in cur.execute("PRAGMA table_info(echanges_points)").fetchall()]
     if "produit_nom" not in colonnes_echanges:
         cur.execute("ALTER TABLE echanges_points ADD COLUMN produit_nom TEXT")
+    if "code_unique" not in colonnes_echanges:
+        cur.execute("ALTER TABLE echanges_points ADD COLUMN code_unique TEXT")
+    if "client_actuel_id" not in colonnes_echanges:
+        cur.execute("ALTER TABLE echanges_points ADD COLUMN client_actuel_id INTEGER")
+        cur.execute("UPDATE echanges_points SET client_actuel_id = client_id WHERE client_actuel_id IS NULL")
 
     cur.execute("""
         CREATE TABLE IF NOT EXISTS menu_echange (
@@ -146,6 +150,7 @@ def creer_tables(conn):
             statut TEXT NOT NULL DEFAULT 'en_attente',
             date_debut TEXT,
             preuve_photo TEXT,
+            coffre_ouvert INTEGER NOT NULL DEFAULT 0,
             date_demande TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
             date_validation TEXT,
             FOREIGN KEY (client_id) REFERENCES clients_fidelite (id),
@@ -181,7 +186,7 @@ def seed_niveaux(conn):
         return  # déjà initialisé, on ne double pas les niveaux
 
     niveaux_par_defaut = [
-        ("Sujet du Royaume", 0, "Bienvenue dans ROYAL+ ! Votre premier achat vous ouvrira les portes de la noblesse.", "#8B0000", "🌱", 1, None, 0, 0),
+        ("Citoyen d'Honneur", 0, "Bienvenue dans ROYAL+ ! Votre premier achat vous ouvrira les portes de la noblesse.", "#8B0000", "🌱", 1, None, 0, 0),
         ("Noble", 2, "5% de réduction débloquée", "#D4AF37", "⚜️", 1, None, 1, 0),
         ("Baron / Baronne", 5, "10% de réduction", "#D4AF37", "🎖️", 1, None, 0, 0),
         ("Duc / Duchesse", 12, "Un sandwich offert", "#D4AF37", "🏰", 1, None, 0, 0),

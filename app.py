@@ -109,6 +109,20 @@ def generer_lien_unique(db, nom, prenom):
             return candidat
 
 
+CARACTERES_CODE_BON = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # sans 0/O ni 1/I, pour éviter les confusions
+
+
+def generer_code_bon(db):
+    """Génère un code de bon unique, lisible (6 caractères, sans caractères ambigus)."""
+    while True:
+        candidat = "".join(secrets.choice(CARACTERES_CODE_BON) for _ in range(6))
+        existe = db.execute(
+            "SELECT 1 FROM echanges_points WHERE code_unique = ?", (candidat,)
+        ).fetchone()
+        if not existe:
+            return candidat
+
+
 def get_niveaux_actifs(db):
     """Renvoie les niveaux actifs triés par seuil d'achats croissant."""
     return db.execute(
@@ -352,18 +366,38 @@ def maj_statut_client(db, client_id):
     db.commit()
 
 
-def fichier_autorise(nom_fichier):
-    return "." in nom_fichier and nom_fichier.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+def fichier_autorise(fichier):
+    """Accepte un fichier si son extension OU son type MIME indique une image —
+    certains téléphones envoient des photos sans extension reconnaissable."""
+    nom_fichier = fichier.filename if hasattr(fichier, "filename") else fichier
+    extension_ok = "." in nom_fichier and nom_fichier.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS
+    mimetype = getattr(fichier, "mimetype", "") or getattr(fichier, "content_type", "") or ""
+    mimetype_ok = mimetype.startswith("image/")
+    return extension_ok or mimetype_ok
+
+
+def extension_depuis_fichier(fichier):
+    """Détermine l'extension à utiliser : celle du nom de fichier si reconnue,
+    sinon déduite du type MIME envoyé par le téléphone."""
+    nom_fichier = fichier.filename or ""
+    if "." in nom_fichier and nom_fichier.rsplit(".", 1)[1].lower() in ALLOWED_EXTENSIONS:
+        return nom_fichier.rsplit(".", 1)[1].lower()
+    mimetype = getattr(fichier, "mimetype", "") or getattr(fichier, "content_type", "") or ""
+    correspondance = {
+        "image/jpeg": "jpg", "image/jpg": "jpg", "image/png": "png",
+        "image/gif": "gif", "image/webp": "webp",
+    }
+    return correspondance.get(mimetype, "jpg")  # jpg par défaut si type inconnu mais accepté
 
 
 def enregistrer_photo(fichier, lien_unique):
     """Sauvegarde la photo uploadée et renvoie le chemin relatif à stocker en base."""
     if not fichier or fichier.filename == "":
         return None
-    if not fichier_autorise(fichier.filename):
+    if not fichier_autorise(fichier):
         flash("Format de photo non autorisé (formats acceptés : jpg, jpeg, png, gif, webp).", "danger")
         return None
-    extension = fichier.filename.rsplit(".", 1)[1].lower()
+    extension = extension_depuis_fichier(fichier)
     nom_final = secure_filename(f"{lien_unique}.{extension}")
     chemin_absolu = os.path.join(UPLOAD_FOLDER, nom_final)
     fichier.save(chemin_absolu)
@@ -373,12 +407,13 @@ def enregistrer_photo(fichier, lien_unique):
 def enregistrer_preuve_mission(fichier, completion_id):
     """Sauvegarde la capture d'écran envoyée comme preuve de mission."""
     if not fichier or fichier.filename == "":
+        flash("Aucune capture d'écran reçue — vérifiez que vous avez bien sélectionné une image.", "danger")
         return None
-    if not fichier_autorise(fichier.filename):
+    if not fichier_autorise(fichier):
         flash("Format d'image non autorisé (formats acceptés : jpg, jpeg, png, gif, webp).", "danger")
         return None
-    extension = fichier.filename.rsplit(".", 1)[1].lower()
-    nom_final = secure_filename(f"preuve-{completion_id}.{extension}")
+    extension = extension_depuis_fichier(fichier)
+    nom_final = secure_filename(f"preuve-{completion_id}-{secrets.token_hex(2)}.{extension}")
     chemin_absolu = os.path.join(UPLOAD_FOLDER_MISSIONS, nom_final)
     fichier.save(chemin_absolu)
     return f"uploads/missions/{nom_final}"
@@ -453,6 +488,13 @@ def carte_client(lien_unique):
         "SELECT * FROM menu_echange WHERE actif = 1 ORDER BY cout_points ASC"
     ).fetchall()
 
+    mes_bons = db.execute(
+        """SELECT * FROM echanges_points
+           WHERE client_actuel_id = ? AND statut = 'en_attente'
+           ORDER BY date_demande DESC""",
+        (client["id"],),
+    ).fetchall()
+
     missions_brutes = db.execute(
         "SELECT * FROM missions WHERE actif = 1 ORDER BY type_mission DESC, points_recompense ASC"
     ).fetchall()
@@ -472,7 +514,6 @@ def carte_client(lien_unique):
         m_dict["statut_client"] = derniere_demande["statut"] if derniere_demande else None
         m_dict["preuve_photo"] = derniere_demande["preuve_photo"] if derniere_demande else None
 
-        # Progression pour les missions minutées, en cours
         m_dict["minutes_restantes"] = None
         m_dict["pourcentage_temps"] = None
         if derniere_demande and derniere_demande["statut"] == "en_cours" and m["duree_heures"] and derniere_demande["date_debut"]:
@@ -485,7 +526,26 @@ def carte_client(lien_unique):
             except (TypeError, ValueError):
                 pass
 
+        m_dict["heures_avant_rejeu"] = None
+        if derniere_demande and derniere_demande["statut"] == "validee" and derniere_demande["date_validation"]:
+            try:
+                date_val = datetime.strptime(derniere_demande["date_validation"], "%Y-%m-%d %H:%M:%S")
+                secondes_ecoulees = (maintenant - date_val).total_seconds()
+                if secondes_ecoulees < 24 * 3600:
+                    m_dict["heures_avant_rejeu"] = round((24 * 3600 - secondes_ecoulees) / 3600, 1)
+            except (TypeError, ValueError):
+                pass
+
         missions_affichees.append(m_dict)
+
+    total_missions_actives = len(missions_affichees)
+    missions_validees_aujourdhui = db.execute(
+        """SELECT COUNT(*) AS n FROM missions_completees
+           WHERE client_id = ? AND statut = 'validee'
+                 AND date(date_validation) = date('now', 'localtime')""",
+        (client["id"],),
+    ).fetchone()["n"]
+    missions_validees_aujourdhui = min(missions_validees_aujourdhui, total_missions_actives)
 
     notifications = db.execute(
         "SELECT * FROM notifications WHERE client_id = ? AND lu = 0 ORDER BY date_creation ASC",
@@ -516,7 +576,6 @@ def carte_client(lien_unique):
         (client["id"],),
     ).fetchall()
 
-    # Récompenses déjà débloquées / à venir, pour l'onglet "Mes privilèges"
     niveaux_debloques = [n for n in niveaux if client["nombre_achats"] >= n["nombre_achats_requis"]]
     niveau_suivant_privilege = progression["niveau_suivant"]
 
@@ -534,6 +593,7 @@ def carte_client(lien_unique):
         niveau_max=niveau_max,
         niveau_min_partage=niveau_min_partage,
         menu=menu,
+        mes_bons=mes_bons,
         cartes_completees=cartes_completees,
         niveau_effectif=niveau_effectif,
         niveau_acquis=niveau_acquis,
@@ -547,6 +607,8 @@ def carte_client(lien_unique):
         niveaux_debloques=niveaux_debloques,
         niveau_suivant_privilege=niveau_suivant_privilege,
         missions=missions_affichees,
+        total_missions_actives=total_missions_actives,
+        missions_validees_aujourdhui=missions_validees_aujourdhui,
     )
 
 
@@ -609,14 +671,11 @@ def partager_points(lien_unique):
     )
     db.commit()
 
-    # Notification interne pour X (l'expéditeur)
     notifier(
         db, client["id"],
         f"✅ Vous avez offert {points} points à {destinataire['prenom']} {destinataire['nom']}. "
         f"Nouveau solde : {nouveau_solde_x} points."
     )
-
-    # Notification interne pour Y (le bénéficiaire)
     notifier(
         db, destinataire["id"],
         f"🎁 {client['prenom']} {client['nom']} vous a offert {points} points ! "
@@ -668,28 +727,82 @@ def echanger_points(lien_unique):
         "UPDATE clients_fidelite SET score_points = score_points - ?, date_derniere_modification = ? WHERE id = ?",
         (produit["cout_points"], maintenant, client["id"]),
     )
+
+    code_bon = generer_code_bon(db)
+
     db.execute(
-        """INSERT INTO echanges_points (client_id, points_echanges, nombre_bons, produit_nom)
-           VALUES (?, ?, ?, ?)""",
-        (client["id"], produit["cout_points"], 0, produit["nom_produit"]),
+        """INSERT INTO echanges_points (client_id, client_actuel_id, points_echanges, nombre_bons, produit_nom, code_unique)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (client["id"], client["id"], produit["cout_points"], 0, produit["nom_produit"], code_bon),
     )
     db.commit()
 
     flash(
         f"🍔 Demande enregistrée : {produit['nom_produit']} contre {produit['cout_points']} points. "
-        f"Votre nouveau solde : {nouveau_solde} points.",
+        f"Votre nouveau solde : {nouveau_solde} points. Votre code de bon : {code_bon}",
         "success",
     )
 
     texte_whatsapp = (
         f"Bonjour Sandwich du Roi ! Je suis {client['prenom']} {client['nom']} ({client['numero']}). "
-        f"Je souhaite échanger {produit['cout_points']} points contre : {produit['nom_produit']}. Merci de confirmer 🙏"
+        f"Je souhaite échanger {produit['cout_points']} points contre : {produit['nom_produit']} (code {code_bon}). Merci de confirmer 🙏"
     )
     session["notification_whatsapp"] = {
         "lien": lien_whatsapp(WHATSAPP_SANDWICH_DU_ROI, texte_whatsapp),
         "nom_destinataire": "Sandwich du Roi",
     }
 
+    return redirect(url_for("carte_client", lien_unique=lien_unique))
+
+
+@app.route("/carte/<lien_unique>/bon/<int:echange_id>/offrir", methods=["POST"])
+def offrir_bon(lien_unique, echange_id):
+    db = get_db()
+    client = db.execute(
+        "SELECT * FROM clients_fidelite WHERE lien_unique = ?", (lien_unique,)
+    ).fetchone()
+    if client is None:
+        abort(404)
+
+    bon = db.execute(
+        """SELECT * FROM echanges_points
+           WHERE id = ? AND client_actuel_id = ? AND statut = 'en_attente'""",
+        (echange_id, client["id"]),
+    ).fetchone()
+    if bon is None:
+        flash("Ce bon n'est plus disponible ou ne vous appartient plus.", "danger")
+        return redirect(url_for("carte_client", lien_unique=lien_unique))
+
+    numero_destinataire = request.form.get("numero_destinataire", "").strip()
+    destinataire = db.execute(
+        "SELECT * FROM clients_fidelite WHERE numero = ?", (numero_destinataire,)
+    ).fetchone()
+
+    if destinataire is None:
+        flash("Aucun client trouvé avec ce numéro.", "danger")
+        return redirect(url_for("carte_client", lien_unique=lien_unique))
+
+    if destinataire["id"] == client["id"]:
+        flash("Vous ne pouvez pas vous offrir un bon à vous-même.", "danger")
+        return redirect(url_for("carte_client", lien_unique=lien_unique))
+
+    db.execute(
+        "UPDATE echanges_points SET client_actuel_id = ? WHERE id = ?",
+        (destinataire["id"], echange_id),
+    )
+
+    notifier(
+        db, client["id"],
+        f"🎁 Vous avez offert votre bon « {bon['produit_nom']} » (code {bon['code_unique']}) à {destinataire['prenom']} {destinataire['nom']}."
+    )
+    notifier(
+        db, destinataire["id"],
+        f"🎁 {client['prenom']} {client['nom']} vous a offert un bon « {bon['produit_nom']} » ! "
+        f"Présentez le code {bon['code_unique']} au comptoir Sandwich du Roi."
+    )
+    db.commit()
+
+    flash(f"🎁 Bon « {bon['produit_nom']} » offert à {destinataire['prenom']} {destinataire['nom']} !", "success")
     return redirect(url_for("carte_client", lien_unique=lien_unique))
 
 
@@ -754,6 +867,21 @@ def demarrer_mission(lien_unique, mission_id):
         flash("Cette mission est déjà en cours.", "warning")
         return redirect(url_for("carte_client", lien_unique=lien_unique))
 
+    derniere_validation = db.execute(
+        """SELECT date_validation FROM missions_completees
+           WHERE client_id = ? AND mission_id = ? AND statut = 'validee'
+           ORDER BY date_validation DESC LIMIT 1""",
+        (client["id"], mission_id),
+    ).fetchone()
+    if derniere_validation and derniere_validation["date_validation"]:
+        try:
+            date_val = datetime.strptime(derniere_validation["date_validation"], "%Y-%m-%d %H:%M:%S")
+            if (datetime.now() - date_val).total_seconds() < 24 * 3600:
+                flash("Vous avez déjà réalisé cette mission aujourd'hui — revenez demain pour la refaire !", "warning")
+                return redirect(url_for("carte_client", lien_unique=lien_unique))
+        except (TypeError, ValueError):
+            pass
+
     db.execute(
         """INSERT INTO missions_completees (client_id, mission_id, statut, date_debut)
            VALUES (?, ?, 'en_cours', ?)""",
@@ -799,7 +927,6 @@ def soumettre_mission(lien_unique, mission_id):
     fichier = request.files.get("preuve_photo")
     chemin_preuve = enregistrer_preuve_mission(fichier, demande_en_cours["id"])
     if not chemin_preuve:
-        flash("Merci de joindre une capture d'écran comme preuve.", "danger")
         return redirect(url_for("carte_client", lien_unique=lien_unique))
 
     db.execute(
@@ -1203,10 +1330,8 @@ def modifier_niveau(niveau_id):
         seuil = niveau["nombre_achats_requis"]
 
     if palier_plancher:
-        # Un seul niveau plancher à la fois : on retire le statut des autres
         db.execute("UPDATE niveaux_fidelite SET palier_plancher = 0 WHERE id != ?", (niveau_id,))
     if debloque_partage:
-        # Un seul niveau de déblocage du partage à la fois
         db.execute("UPDATE niveaux_fidelite SET debloque_partage = 0 WHERE id != ?", (niveau_id,))
 
     db.execute(
@@ -1218,7 +1343,6 @@ def modifier_niveau(niveau_id):
     )
     db.commit()
 
-    # Le changement d'un seuil peut changer le statut de tous les clients concernés
     clients = db.execute("SELECT id FROM clients_fidelite").fetchall()
     for c in clients:
         maj_statut_client(db, c["id"])
@@ -1246,9 +1370,12 @@ def supprimer_niveau(niveau_id):
 def gestion_echanges():
     db = get_db()
     echanges = db.execute(
-        """SELECT echanges_points.*, clients_fidelite.nom, clients_fidelite.prenom, clients_fidelite.numero
+        """SELECT echanges_points.*,
+                  porteur.nom AS nom, porteur.prenom AS prenom, porteur.numero AS numero,
+                  demandeur.nom AS nom_demandeur, demandeur.prenom AS prenom_demandeur
            FROM echanges_points
-           JOIN clients_fidelite ON clients_fidelite.id = echanges_points.client_id
+           LEFT JOIN clients_fidelite AS porteur ON porteur.id = echanges_points.client_actuel_id
+           LEFT JOIN clients_fidelite AS demandeur ON demandeur.id = echanges_points.client_id
            ORDER BY
                CASE WHEN echanges_points.statut = 'en_attente' THEN 0 ELSE 1 END,
                echanges_points.date_demande DESC"""
@@ -1274,155 +1401,6 @@ def honorer_echange(echange_id):
 # ----------------------------------------------------------------------
 # ADMINISTRATION — MENU DE RÉCOMPENSES (échange de points)
 # ----------------------------------------------------------------------
-
-@app.route("/admin/missions")
-@admin_requis
-def gestion_missions():
-    db = get_db()
-    missions = db.execute("SELECT * FROM missions ORDER BY id ASC").fetchall()
-    demandes = db.execute(
-        """SELECT missions_completees.*, missions.titre, missions.points_recompense, missions.icone,
-                  clients_fidelite.nom, clients_fidelite.prenom, clients_fidelite.numero
-           FROM missions_completees
-           JOIN missions ON missions.id = missions_completees.mission_id
-           JOIN clients_fidelite ON clients_fidelite.id = missions_completees.client_id
-           ORDER BY
-               CASE WHEN missions_completees.statut = 'en_attente' THEN 0 ELSE 1 END,
-               missions_completees.date_demande DESC"""
-    ).fetchall()
-    return render_template("gestion_missions.html", missions=missions, demandes=demandes)
-
-
-@app.route("/admin/missions/ajouter", methods=["POST"])
-@admin_requis
-def ajouter_mission():
-    db = get_db()
-    titre = request.form.get("titre", "").strip()
-    description = request.form.get("description", "").strip()
-    points_brut = request.form.get("points_recompense", "0")
-    type_mission = request.form.get("type_mission", "manuelle")
-    seuil_jours_brut = request.form.get("seuil_jours", "").strip()
-    icone = request.form.get("icone", "🎯").strip() or "🎯"
-
-    if not titre:
-        flash("Le titre de la mission est obligatoire.", "danger")
-        return redirect(url_for("gestion_missions"))
-
-    try:
-        points = max(1, int(points_brut))
-    except ValueError:
-        points = 1
-
-    seuil_jours = int(seuil_jours_brut) if seuil_jours_brut.isdigit() else None
-
-    db.execute(
-        """INSERT INTO missions (titre, description, points_recompense, type_mission, seuil_jours, icone, actif)
-           VALUES (?, ?, ?, ?, ?, ?, 1)""",
-        (titre, description, points, type_mission, seuil_jours, icone),
-    )
-    db.commit()
-    flash("Mission ajoutée.", "success")
-    return redirect(url_for("gestion_missions"))
-
-
-@app.route("/admin/missions/modifier/<int:mission_id>", methods=["POST"])
-@admin_requis
-def modifier_mission(mission_id):
-    db = get_db()
-    mission = db.execute("SELECT * FROM missions WHERE id = ?", (mission_id,)).fetchone()
-    if mission is None:
-        abort(404)
-
-    titre = request.form.get("titre", mission["titre"]).strip()
-    description = request.form.get("description", mission["description"])
-    points_brut = request.form.get("points_recompense", str(mission["points_recompense"]))
-    type_mission = request.form.get("type_mission", mission["type_mission"])
-    seuil_jours_brut = request.form.get("seuil_jours", "").strip()
-    icone = request.form.get("icone", mission["icone"])
-    actif = 1 if request.form.get("actif") == "on" else 0
-
-    try:
-        points = max(1, int(points_brut))
-    except ValueError:
-        points = mission["points_recompense"]
-
-    seuil_jours = int(seuil_jours_brut) if seuil_jours_brut.isdigit() else None
-
-    db.execute(
-        """UPDATE missions
-           SET titre = ?, description = ?, points_recompense = ?, type_mission = ?,
-               seuil_jours = ?, icone = ?, actif = ?
-           WHERE id = ?""",
-        (titre, description, points, type_mission, seuil_jours, icone, actif, mission_id),
-    )
-    db.commit()
-    flash("Mission modifiée.", "success")
-    return redirect(url_for("gestion_missions"))
-
-
-@app.route("/admin/missions/supprimer/<int:mission_id>", methods=["POST"])
-@admin_requis
-def supprimer_mission(mission_id):
-    db = get_db()
-    db.execute("DELETE FROM missions WHERE id = ?", (mission_id,))
-    db.commit()
-    flash("Mission supprimée.", "warning")
-    return redirect(url_for("gestion_missions"))
-
-
-@app.route("/admin/missions/demande/<int:completion_id>/valider", methods=["POST"])
-@admin_requis
-def valider_mission(completion_id):
-    db = get_db()
-    demande = db.execute(
-        "SELECT * FROM missions_completees WHERE id = ?", (completion_id,)
-    ).fetchone()
-    if demande is None:
-        abort(404)
-
-    mission = db.execute("SELECT * FROM missions WHERE id = ?", (demande["mission_id"],)).fetchone()
-    client = db.execute("SELECT * FROM clients_fidelite WHERE id = ?", (demande["client_id"],)).fetchone()
-
-    if demande["statut"] != "en_attente" or mission is None or client is None:
-        flash("Cette demande a déjà été traitée.", "warning")
-        return redirect(url_for("gestion_missions"))
-
-    nouveau_solde = client["score_points"] + mission["points_recompense"]
-    db.execute(
-        "UPDATE clients_fidelite SET score_points = ?, date_derniere_modification = ? WHERE id = ?",
-        (nouveau_solde, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), client["id"]),
-    )
-    db.execute(
-        "UPDATE missions_completees SET statut = 'validee', date_validation = ?, coffre_ouvert = 0 WHERE id = ?",
-        (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), completion_id),
-    )
-    db.commit()
-    flash("Mission validée, points crédités. Le client pourra ouvrir son coffre royal.", "success")
-    return redirect(url_for("gestion_missions"))
-
-
-@app.route("/admin/missions/demande/<int:completion_id>/rejeter", methods=["POST"])
-@admin_requis
-def rejeter_mission(completion_id):
-    db = get_db()
-    demande = db.execute("SELECT * FROM missions_completees WHERE id = ?", (completion_id,)).fetchone()
-    if demande is None:
-        abort(404)
-    mission = db.execute("SELECT * FROM missions WHERE id = ?", (demande["mission_id"],)).fetchone()
-    db.execute(
-        "UPDATE missions_completees SET statut = 'rejetee', date_validation = ? WHERE id = ?",
-        (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), completion_id),
-    )
-    if mission is not None:
-        notifier(
-            db, demande["client_id"],
-            f"😕 Votre preuve pour la mission « {mission['titre']} » n'a pas été validée. "
-            f"Vous pouvez recommencer cette mission quand vous voulez !"
-        )
-    db.commit()
-    flash("Demande rejetée.", "warning")
-    return redirect(url_for("gestion_missions"))
-
 
 @app.route("/admin/menu-echange")
 @admin_requis
@@ -1500,6 +1478,164 @@ def supprimer_produit_menu(produit_id):
     db.commit()
     flash("Article supprimé du menu.", "warning")
     return redirect(url_for("gestion_menu_echange"))
+
+
+# ----------------------------------------------------------------------
+# ADMINISTRATION — MISSIONS
+# ----------------------------------------------------------------------
+
+@app.route("/admin/missions")
+@admin_requis
+def gestion_missions():
+    db = get_db()
+    missions = db.execute("SELECT * FROM missions ORDER BY id ASC").fetchall()
+    demandes = db.execute(
+        """SELECT missions_completees.*, missions.titre, missions.points_recompense, missions.icone,
+                  clients_fidelite.nom, clients_fidelite.prenom, clients_fidelite.numero
+           FROM missions_completees
+           JOIN missions ON missions.id = missions_completees.mission_id
+           JOIN clients_fidelite ON clients_fidelite.id = missions_completees.client_id
+           WHERE missions_completees.statut IN ('en_attente', 'validee', 'rejetee')
+           ORDER BY
+               CASE WHEN missions_completees.statut = 'en_attente' THEN 0 ELSE 1 END,
+               missions_completees.date_demande DESC"""
+    ).fetchall()
+    return render_template("gestion_missions.html", missions=missions, demandes=demandes)
+
+
+@app.route("/admin/missions/ajouter", methods=["POST"])
+@admin_requis
+def ajouter_mission():
+    db = get_db()
+    titre = request.form.get("titre", "").strip()
+    description = request.form.get("description", "").strip()
+    points_brut = request.form.get("points_recompense", "0")
+    type_mission = request.form.get("type_mission", "manuelle")
+    seuil_jours_brut = request.form.get("seuil_jours", "").strip()
+    duree_heures_brut = request.form.get("duree_heures", "").strip()
+    icone = request.form.get("icone", "🎯").strip() or "🎯"
+
+    if not titre:
+        flash("Le titre de la mission est obligatoire.", "danger")
+        return redirect(url_for("gestion_missions"))
+
+    try:
+        points = max(1, int(points_brut))
+    except ValueError:
+        points = 1
+
+    seuil_jours = int(seuil_jours_brut) if seuil_jours_brut.isdigit() else None
+    duree_heures = int(duree_heures_brut) if duree_heures_brut.isdigit() else None
+
+    db.execute(
+        """INSERT INTO missions (titre, description, points_recompense, type_mission, seuil_jours, duree_heures, icone, actif)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 1)""",
+        (titre, description, points, type_mission, seuil_jours, duree_heures, icone),
+    )
+    db.commit()
+    flash("Mission ajoutée.", "success")
+    return redirect(url_for("gestion_missions"))
+
+
+@app.route("/admin/missions/modifier/<int:mission_id>", methods=["POST"])
+@admin_requis
+def modifier_mission(mission_id):
+    db = get_db()
+    mission = db.execute("SELECT * FROM missions WHERE id = ?", (mission_id,)).fetchone()
+    if mission is None:
+        abort(404)
+
+    titre = request.form.get("titre", mission["titre"]).strip()
+    description = request.form.get("description", mission["description"])
+    points_brut = request.form.get("points_recompense", str(mission["points_recompense"]))
+    type_mission = request.form.get("type_mission", mission["type_mission"])
+    seuil_jours_brut = request.form.get("seuil_jours", "").strip()
+    duree_heures_brut = request.form.get("duree_heures", "").strip()
+    icone = request.form.get("icone", mission["icone"])
+    actif = 1 if request.form.get("actif") == "on" else 0
+
+    try:
+        points = max(1, int(points_brut))
+    except ValueError:
+        points = mission["points_recompense"]
+
+    seuil_jours = int(seuil_jours_brut) if seuil_jours_brut.isdigit() else None
+    duree_heures = int(duree_heures_brut) if duree_heures_brut.isdigit() else None
+
+    db.execute(
+        """UPDATE missions
+           SET titre = ?, description = ?, points_recompense = ?, type_mission = ?,
+               seuil_jours = ?, duree_heures = ?, icone = ?, actif = ?
+           WHERE id = ?""",
+        (titre, description, points, type_mission, seuil_jours, duree_heures, icone, actif, mission_id),
+    )
+    db.commit()
+    flash("Mission modifiée.", "success")
+    return redirect(url_for("gestion_missions"))
+
+
+@app.route("/admin/missions/supprimer/<int:mission_id>", methods=["POST"])
+@admin_requis
+def supprimer_mission(mission_id):
+    db = get_db()
+    db.execute("DELETE FROM missions WHERE id = ?", (mission_id,))
+    db.commit()
+    flash("Mission supprimée.", "warning")
+    return redirect(url_for("gestion_missions"))
+
+
+@app.route("/admin/missions/demande/<int:completion_id>/valider", methods=["POST"])
+@admin_requis
+def valider_mission(completion_id):
+    db = get_db()
+    demande = db.execute(
+        "SELECT * FROM missions_completees WHERE id = ?", (completion_id,)
+    ).fetchone()
+    if demande is None:
+        abort(404)
+
+    mission = db.execute("SELECT * FROM missions WHERE id = ?", (demande["mission_id"],)).fetchone()
+    client = db.execute("SELECT * FROM clients_fidelite WHERE id = ?", (demande["client_id"],)).fetchone()
+
+    if demande["statut"] != "en_attente" or mission is None or client is None:
+        flash("Cette demande a déjà été traitée.", "warning")
+        return redirect(url_for("gestion_missions"))
+
+    nouveau_solde = client["score_points"] + mission["points_recompense"]
+    db.execute(
+        "UPDATE clients_fidelite SET score_points = ?, date_derniere_modification = ? WHERE id = ?",
+        (nouveau_solde, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), client["id"]),
+    )
+    db.execute(
+        "UPDATE missions_completees SET statut = 'validee', date_validation = ?, coffre_ouvert = 0 WHERE id = ?",
+        (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), completion_id),
+    )
+    db.commit()
+    flash("Mission validée, points crédités. Le client pourra ouvrir son coffre royal.", "success")
+    return redirect(url_for("gestion_missions"))
+
+
+@app.route("/admin/missions/demande/<int:completion_id>/rejeter", methods=["POST"])
+@admin_requis
+def rejeter_mission(completion_id):
+    db = get_db()
+    demande = db.execute("SELECT * FROM missions_completees WHERE id = ?", (completion_id,)).fetchone()
+    if demande is None:
+        abort(404)
+    mission = db.execute("SELECT * FROM missions WHERE id = ?", (demande["mission_id"],)).fetchone()
+    db.execute(
+        "UPDATE missions_completees SET statut = 'rejetee', date_validation = ? WHERE id = ?",
+        (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), completion_id),
+    )
+    if mission is not None:
+        notifier(
+            db, demande["client_id"],
+            f"😕 Votre preuve pour la mission « {mission['titre']} » n'a pas été validée. "
+            f"Vous pouvez recommencer cette mission quand vous voulez !"
+        )
+    db.commit()
+    flash("Demande rejetée.", "warning")
+    return redirect(url_for("gestion_missions"))
 
 
 # ----------------------------------------------------------------------
