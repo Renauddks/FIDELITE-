@@ -14,6 +14,7 @@
                     <th>Client</th>
                     <th>Numéro</th>
                     <th>Mission</th>
+                    <th>Preuve</th>
                     <th>Points</th>
                     <th>Date</th>
                     <th>Statut</th>
@@ -26,6 +27,15 @@
                     <td>{{ demande.prenom }} {{ demande.nom }}</td>
                     <td>{{ demande.numero or '—' }}</td>
                     <td>{{ demande.icone }} {{ demande.titre }}</td>
+                    <td>
+                        {% if demande.preuve_photo %}
+                        <a href="{{ url_for('static', filename=demande.preuve_photo) }}" target="_blank" rel="noopener">
+                            <img src="{{ url_for('static', filename=demande.preuve_photo) }}" alt="Preuve" class="miniature-preuve">
+                        </a>
+                        {% elif demande.statut == 'en_attente' %}
+                        <span class="alerte-sans-preuve">⚠️ Aucune preuve jointe</span>
+                        {% else %}—{% endif %}
+                    </td>
                     <td>{{ demande.points_recompense }}</td>
                     <td>{{ demande.date_demande }}</td>
                     <td>
@@ -49,7 +59,7 @@
                     </td>
                 </tr>
                 {% else %}
-                <tr><td colspan="7" class="ligne-vide">Aucune demande pour le moment.</td></tr>
+                <tr><td colspan="8" class="ligne-vide">Aucune demande pour le moment.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -67,6 +77,7 @@
             <option value="auto_retour">Automatique (retour rapide)</option>
         </select>
         <input type="number" name="seuil_jours" placeholder="Délai en jours (si automatique)" min="1">
+        <input type="number" name="duree_heures" placeholder="Durée en heures (si mission chronométrée)" min="1">
         <textarea name="description" placeholder="Description affichée au client" rows="2"></textarea>
         <button type="submit" class="bouton bouton-principal">+ Ajouter</button>
     </form>
@@ -91,6 +102,8 @@
         </select>
         <label>Délai en jours (si automatique)</label>
         <input type="number" name="seuil_jours" value="{{ mission.seuil_jours or '' }}" min="1">
+        <label>Durée en heures (si mission chronométrée)</label>
+        <input type="number" name="duree_heures" value="{{ mission.duree_heures or '' }}" min="1">
         <label class="case-actif">
             <input type="checkbox" name="actif" {% if mission.actif %}checked{% endif %}>
             Mission active

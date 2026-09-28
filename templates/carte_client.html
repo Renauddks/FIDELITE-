@@ -129,7 +129,7 @@
 
             <div class="bloc-barre-progression">
                 <div class="barre-progression-info">
-                    <span>{{ progression.niveau_actuel.nom_niveau if progression.niveau_actuel else 'Sujet du Royaume' }}</span>
+                    <span>{{ progression.niveau_actuel.nom_niveau if progression.niveau_actuel else "Citoyen d'Honneur" }}</span>
                     <span>{{ progression.niveau_suivant.nom_niveau if progression.niveau_suivant else 'Rang suprême' }}</span>
                 </div>
                 <div class="barre-progression">
@@ -158,17 +158,22 @@
                 {% set courant = progression.niveau_actuel and niveau.id == progression.niveau_actuel.id %}
                 <div class="parcours-etape {% if courant %}parcours-courant{% elif atteint %}parcours-atteint{% else %}parcours-verrouille{% endif %}">
                     <div class="parcours-marqueur">
-                        <span class="parcours-icone">{{ niveau.icone }}</span>
-                        {% if courant %}<span class="parcours-pastille">📍</span>{% elif atteint %}<span class="parcours-pastille">✅</span>{% else %}<span class="parcours-pastille">🔒</span>{% endif %}
+                        <span class="parcours-diamant">{{ loop.index }}</span>
                     </div>
                     <button type="button" class="parcours-corps"
                             onclick="ouvrirNiveau('{{ niveau.icone }} {{ niveau.nom_niveau|e }}', '{{ (niveau.avantages or 'Aucun avantage renseigné pour ce niveau.')|e }}')">
-                        <span class="parcours-nom">{{ niveau.nom_niveau }}{% if niveau_min_partage and niveau.nombre_achats_requis >= niveau_min_partage.nombre_achats_requis %} 🎁{% endif %}</span>
-                        <span class="parcours-seuil">🎯 {{ niveau.nombre_achats_requis }} achat{{ 's' if niveau.nombre_achats_requis != 1 else '' }}</span>
-                        <span class="parcours-recompense">🎁 {{ niveau.avantages or 'Avantage à venir' }}</span>
+                        <span class="parcours-corps-icone">{{ niveau.icone }}</span>
+                        <span class="parcours-corps-texte">
+                            <span class="parcours-nom">{{ niveau.nom_niveau }}{% if niveau_min_partage and niveau.nombre_achats_requis >= niveau_min_partage.nombre_achats_requis %} 🎁{% endif %}</span>
+                            <span class="parcours-seuil">🎯 {{ niveau.nombre_achats_requis }} achat{{ 's' if niveau.nombre_achats_requis != 1 else '' }}</span>
+                            <span class="parcours-recompense">{{ niveau.avantages or 'Avantage à venir' }}</span>
+                        </span>
+                        {% if courant %}<span class="parcours-statut-icone parcours-statut-courant">📍</span>
+                        {% elif atteint %}<span class="parcours-statut-icone parcours-statut-atteint">✅</span>
+                        {% else %}<span class="parcours-statut-icone parcours-statut-verrou">🔒</span>{% endif %}
                     </button>
                 </div>
-                {% if not loop.last %}<div class="parcours-lien"></div>{% endif %}
+                {% if not loop.last %}<div class="parcours-lien {% if atteint %}parcours-lien-atteint{% endif %}"></div>{% endif %}
             {% endfor %}
         </div>
     </div>
@@ -219,6 +224,17 @@
         <p class="titre-section">🎯 Missions bonus</p>
         <p class="texte-aide">Réalisez ces petits défis entre deux achats pour gagner des points supplémentaires !</p>
 
+        <div class="bloc-progression-jour">
+            <p class="progression-jour-titre">Progression du jour</p>
+            <div class="progression-jour-ligne">
+                <div class="progression-jour-barre">
+                    <div class="progression-jour-remplissage" style="width: {{ (missions_validees_aujourdhui / total_missions_actives * 100) if total_missions_actives else 0 }}%;"></div>
+                    <span class="progression-jour-texte">{{ missions_validees_aujourdhui }}/{{ total_missions_actives }}</span>
+                </div>
+                <span class="progression-jour-coffre">🔐</span>
+            </div>
+        </div>
+
         <div class="liste-missions">
             {% for mission in missions %}
             <div class="mission-item {% if mission.type_mission == 'auto_retour' %}mission-auto{% elif mission.statut_client == 'validee' %}mission-validee{% elif mission.statut_client == 'en_attente' %}mission-attente{% elif mission.statut_client == 'en_cours' %}mission-encours{% endif %}">
@@ -256,9 +272,13 @@
 
                     {% elif mission.statut_client == 'validee' %}
                         <span class="mission-badge mission-badge-validee">✅ Réalisée</span>
-                        <form method="POST" action="{{ url_for('demarrer_mission', lien_unique=client.lien_unique, mission_id=mission.id) }}">
-                            <button type="submit" class="bouton bouton-mini bouton-clair">🔁 Refaire cette mission</button>
-                        </form>
+                        {% if mission.heures_avant_rejeu %}
+                            <p class="mission-temps">⏳ Revenez dans {{ mission.heures_avant_rejeu }}h pour la refaire (1 fois par jour)</p>
+                        {% else %}
+                            <form method="POST" action="{{ url_for('demarrer_mission', lien_unique=client.lien_unique, mission_id=mission.id) }}">
+                                <button type="submit" class="bouton bouton-mini bouton-clair">🔁 Refaire cette mission</button>
+                            </form>
+                        {% endif %}
 
                     {% else %}
                         <form method="POST" action="{{ url_for('demarrer_mission', lien_unique=client.lien_unique, mission_id=mission.id) }}">
@@ -316,6 +336,29 @@
             </form>
         {% else %}
             <p class="texte-verrouille">Aucun article disponible pour le moment.</p>
+        {% endif %}
+    </div>
+
+    <div class="carte-mes-bons">
+        <p class="titre-section">🎫 Mes bons en attente</p>
+        {% if mes_bons %}
+            <div class="liste-bons">
+                {% for bon in mes_bons %}
+                <div class="bon-item">
+                    <div class="bon-entete">
+                        <span class="bon-code">{{ bon.code_unique }}</span>
+                        <span class="bon-produit">{{ bon.produit_nom }} ({{ bon.points_echanges }} pts)</span>
+                    </div>
+                    <p class="texte-aide">Présentez ce code au comptoir Sandwich du Roi pour en profiter.</p>
+                    <form method="POST" action="{{ url_for('offrir_bon', lien_unique=client.lien_unique, echange_id=bon.id) }}" class="formulaire-offrir-bon">
+                        <input type="text" name="numero_destinataire" placeholder="Numéro d'un autre client pour lui offrir ce bon" required>
+                        <button type="submit" class="bouton bouton-mini bouton-clair-bordeaux">🎁 Offrir ce bon</button>
+                    </form>
+                </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p class="texte-verrouille">Aucun bon en attente pour le moment.</p>
         {% endif %}
     </div>
 </div>

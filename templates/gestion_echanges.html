@@ -9,7 +9,8 @@
     <table class="tableau-clients">
         <thead>
             <tr>
-                <th>Client</th>
+                <th>Code</th>
+                <th>Porteur actuel</th>
                 <th>Numéro</th>
                 <th>Demande</th>
                 <th>Points</th>
@@ -21,7 +22,13 @@
         <tbody>
             {% for echange in echanges %}
             <tr>
-                <td>{{ echange.prenom }} {{ echange.nom }}</td>
+                <td><code>{{ echange.code_unique or '—' }}</code></td>
+                <td>
+                    {{ echange.prenom }} {{ echange.nom }}
+                    {% if echange.prenom_demandeur and (echange.prenom != echange.prenom_demandeur or echange.nom != echange.nom_demandeur) %}
+                        <br><span class="texte-aide">🎁 offert par {{ echange.prenom_demandeur }} {{ echange.nom_demandeur }}</span>
+                    {% endif %}
+                </td>
                 <td>{{ echange.numero or '—' }}</td>
                 <td>{{ echange.produit_nom or (echange.nombre_bons ~ ' bon(s)') }}</td>
                 <td>{{ echange.points_echanges }}</td>
@@ -42,7 +49,7 @@
                 </td>
             </tr>
             {% else %}
-            <tr><td colspan="7" class="ligne-vide">Aucune demande d'échange pour le moment.</td></tr>
+            <tr><td colspan="8" class="ligne-vide">Aucune demande d'échange pour le moment.</td></tr>
             {% endfor %}
         </tbody>
     </table>
