@@ -20,7 +20,6 @@ body {
     color: var(--gris-texte);
 }
 
-/* -------- En-tête -------- */
 .entete {
     background: linear-gradient(135deg, var(--bordeaux), var(--bordeaux-fonce));
     padding: 18px 16px;
@@ -62,7 +61,6 @@ body {
     color: #999;
 }
 
-/* -------- Messages flash -------- */
 .messages-flash { margin-bottom: 16px; }
 .flash {
     padding: 10px 14px;
@@ -74,7 +72,6 @@ body {
 .flash-danger { background: #fdecea; color: var(--danger); }
 .flash-warning { background: #fff6e0; color: #8a6d00; }
 
-/* -------- Boutons -------- */
 .bouton {
     display: inline-block;
     padding: 10px 18px;
@@ -94,7 +91,6 @@ body {
 .bouton-danger { background: var(--danger); color: var(--blanc); }
 .bouton-mini { padding: 6px 12px; font-size: 0.8rem; }
 
-/* -------- Formulaires -------- */
 form label {
     display: block;
     font-size: 0.85rem;
@@ -119,7 +115,6 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
 .formulaire-recherche { display: flex; gap: 8px; margin-bottom: 14px; }
 .formulaire-recherche input { flex: 1; padding: 10px; border-radius: 8px; border: 1px solid #ddd; }
 
-/* -------- Cartes génériques -------- */
 .carte-presentation, .carte-formulaire, .carte-fiche {
     background: var(--blanc);
     border-radius: 14px;
@@ -135,9 +130,8 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
 .texte-aide { font-size: 0.8rem; color: #888; margin-top: 6px; }
 .bloc-action { margin-top: 18px; }
 
-/* -------- Tableau admin -------- */
 .barre-admin { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
-.barre-admin-actions { display: flex; gap: 8px; }
+.barre-admin-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .tableau-scroll { overflow-x: auto; background: var(--blanc); border-radius: 12px; box-shadow: var(--ombre); }
 .tableau-clients { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
 .tableau-clients th, .tableau-clients td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #eee; white-space: nowrap; }
@@ -146,7 +140,6 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
 .badge-statut { background: var(--or-clair); color: var(--bordeaux-fonce); padding: 3px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: 600; }
 .bouton-lien { background: none; border: 1px solid var(--or); color: var(--bordeaux); border-radius: 8px; padding: 4px 10px; font-size: 0.78rem; cursor: pointer; }
 
-/* -------- Fiche client admin -------- */
 .lien-retour { display: inline-block; margin-bottom: 14px; color: var(--bordeaux); text-decoration: none; font-size: 0.9rem; }
 .fiche-meta { font-size: 0.9rem; color: #666; }
 .fiche-stats { display: flex; gap: 16px; margin-top: 14px; flex-wrap: wrap; }
@@ -155,7 +148,6 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
 .grille-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 @media (max-width: 600px) { .grille-actions { grid-template-columns: 1fr; } }
 
-/* -------- Niveaux (admin) -------- */
 .formulaire-niveau { display: grid; grid-template-columns: 2fr 1fr 70px 70px; gap: 8px; }
 .formulaire-niveau textarea { grid-column: 1 / -1; }
 .formulaire-niveau button { grid-column: 1 / -1; }
@@ -169,193 +161,12 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
 .case-actif input { width: auto; }
 .carte-niveau-actions { display: flex; gap: 8px; margin-top: 12px; }
 
-/* -------- CARTE DE FIDÉLITÉ (client) -------- */
-.entete-royal { text-align: center; margin-bottom: 12px; }
-.eyebrow-royal {
-    font-size: 0.78rem;
-    font-weight: 800;
-    letter-spacing: 1px;
-    color: var(--bordeaux);
-    margin: 0 0 4px;
-}
-.tagline-royal {
-    font-size: 0.82rem;
-    color: #888;
-    font-style: italic;
-    margin: 0;
-}
+.miniature-preuve { width: 90px; height: 90px; object-fit: cover; border-radius: 10px; border: 2px solid var(--or); cursor: zoom-in; }
+.alerte-sans-preuve { display: inline-block; background: #fdecea; color: var(--danger); font-size: 0.75rem; font-weight: 700; padding: 4px 10px; border-radius: 8px; white-space: normal; }
+.badge-attente { background: #fff3cd; color: #8a6d00; }
+.badge-honore { background: #d4edda; color: #256029; }
 
-.carte-fidelite-parcours { padding: 4px 0 22px; }
-.parcours-royal {
-    display: flex;
-    flex-direction: column;
-    padding: 0 20px;
-}
-.parcours-etape {
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-}
-.parcours-marqueur {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    flex-shrink: 0;
-    width: 40px;
-}
-.parcours-icone {
-    width: 40px; height: 40px;
-    border-radius: 50%;
-    background: var(--gris-clair);
-    border: 2px solid #ddd;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 1.15rem;
-}
-.parcours-pastille { font-size: 0.85rem; margin-top: 2px; }
-.parcours-corps {
-    flex: 1;
-    background: var(--blanc);
-    border: 1px solid #eee;
-    border-radius: 12px;
-    padding: 10px 14px;
-    margin-bottom: 4px;
-    text-align: left;
-    cursor: pointer;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-.parcours-nom { font-weight: 700; font-size: 0.9rem; color: var(--gris-texte); }
-.parcours-seuil { font-size: 0.74rem; color: #888; }
-.parcours-recompense { font-size: 0.76rem; color: var(--bordeaux); }
-.parcours-lien {
-    width: 2px;
-    height: 18px;
-    background: #e2ddd0;
-    margin-left: 39px;
-}
-
-.parcours-atteint .parcours-icone { background: var(--or-clair); border-color: var(--or); }
-.parcours-atteint .parcours-corps { border-color: var(--or-clair); }
-
-.parcours-courant .parcours-icone {
-    background: var(--bordeaux);
-    border-color: var(--bordeaux);
-    color: var(--blanc);
-    box-shadow: 0 0 0 4px rgba(139, 0, 0, 0.15);
-}
-.parcours-courant .parcours-corps { border: 2px solid var(--bordeaux); }
-.parcours-courant .parcours-nom { color: var(--bordeaux); }
-
-.parcours-verrouille .parcours-corps { opacity: 0.6; }
-.parcours-verrouille .parcours-nom { color: #999; }
-
-/* -------- Mes privilèges -------- */
-.carte-privileges {
-    background: var(--blanc);
-    border-radius: 18px;
-    box-shadow: var(--ombre);
-    padding: 20px;
-    margin-bottom: 16px;
-}
-.sous-titre-privileges {
-    font-size: 0.8rem;
-    font-weight: 700;
-    color: var(--bordeaux);
-    margin: 16px 0 8px;
-}
-.liste-privileges { display: flex; flex-direction: column; gap: 8px; }
-.privilege-item {
-    display: flex;
-    gap: 12px;
-    align-items: flex-start;
-    padding: 10px 12px;
-    border-radius: 12px;
-}
-.privilege-debloque { background: #fff8e6; border: 1px solid var(--or-clair); }
-.privilege-a-venir { background: var(--gris-clair); border: 1px dashed #ddd; }
-.privilege-icone { font-size: 1.4rem; }
-.privilege-nom { font-weight: 700; font-size: 0.88rem; margin: 0 0 2px; }
-.privilege-detail { font-size: 0.78rem; color: #777; margin: 0; }
-
-/* -------- Missions -------- */
-.carte-missions {
-    background: var(--blanc);
-    border-radius: 18px;
-    box-shadow: var(--ombre);
-    padding: 20px;
-    margin-bottom: 16px;
-}
-.liste-missions { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
-.mission-item {
-    display: flex;
-    gap: 12px;
-    padding: 12px 14px;
-    border-radius: 14px;
-    background: var(--gris-clair);
-    border: 1px solid #eee;
-}
-.mission-icone { font-size: 1.5rem; }
-.mission-corps { flex: 1; }
-.mission-titre { font-weight: 700; font-size: 0.88rem; margin: 0 0 3px; display: flex; justify-content: space-between; gap: 6px; }
-.mission-points { color: var(--bordeaux); white-space: nowrap; }
-.mission-description { font-size: 0.78rem; color: #777; margin: 0 0 8px; }
-.mission-badge {
-    display: inline-block;
-    font-size: 0.7rem;
-    font-weight: 700;
-    padding: 3px 10px;
-    border-radius: 10px;
-}
-.mission-badge-auto { background: #e8f4fb; color: #2f8fc4; }
-.mission-badge-attente { background: #fff3cd; color: #8a6d00; }
-.mission-badge-validee { background: #e3f6e3; color: #256029; }
-.mission-auto { background: #f0f8fd; border-color: #cfe8f7; }
-.mission-validee { background: #e3f6e3; border-color: #c3e6c3; }
-.mission-attente { background: #fff8e6; border-color: #f0dca0; }
-.mission-encours { background: #fdf0e5; border-color: #f0c99a; }
-
-.mission-progression { margin-top: 4px; }
-.mission-barre {
-    height: 10px;
-    background: var(--gris-clair);
-    border-radius: 8px;
-    overflow: hidden;
-    border: 1px solid #eee;
-}
-.mission-barre-remplissage {
-    height: 100%;
-    background: linear-gradient(90deg, var(--or), var(--bordeaux));
-    transition: width 0.6s ease;
-}
-.mission-temps { font-size: 0.74rem; color: #8a5a2b; margin: 6px 0 0; }
-
-.formulaire-preuve-mission { margin-top: 6px; }
-.formulaire-preuve-mission input[type="file"] { font-size: 0.78rem; padding: 6px; margin-bottom: 6px; }
-
-/* -------- Mon historique -------- */
-.carte-historique {
-    background: var(--blanc);
-    border-radius: 18px;
-    box-shadow: var(--ombre);
-    padding: 20px;
-    margin-bottom: 16px;
-}
-.liste-historique { display: flex; flex-direction: column; gap: 8px; }
-.historique-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 12px;
-    background: var(--gris-clair);
-    border-radius: 10px;
-}
-.historique-date { font-size: 0.8rem; font-weight: 600; margin: 0; }
-.historique-note { font-size: 0.72rem; color: #888; margin: 2px 0 0; }
-.historique-montants { text-align: right; }
-.historique-montant { display: block; font-weight: 700; color: var(--bordeaux); font-size: 0.85rem; }
-.historique-points { display: block; font-size: 0.72rem; color: #2f8fc4; }
-
+/* -------- Navigation par icônes -------- */
 .nav-icones {
     display: flex;
     flex-wrap: wrap;
@@ -396,6 +207,92 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
     font-weight: 700;
 }
 
+/* -------- Coffres royaux -------- */
+.bloc-coffres {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+.coffre-royal {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: linear-gradient(135deg, var(--bordeaux), var(--bordeaux-fonce));
+    border: 2px solid var(--or);
+    border-radius: 16px;
+    padding: 14px 16px;
+    box-shadow: 0 4px 14px rgba(139, 0, 0, 0.35);
+    animation: pulsation-coffre 2s ease-in-out infinite;
+}
+@keyframes pulsation-coffre {
+    0%, 100% { box-shadow: 0 4px 14px rgba(139, 0, 0, 0.35); }
+    50% { box-shadow: 0 4px 22px rgba(212, 175, 55, 0.65); }
+}
+.coffre-icone { font-size: 2rem; flex-shrink: 0; }
+.coffre-corps { flex: 1; min-width: 0; }
+.coffre-titre { color: var(--or); font-weight: 800; font-size: 0.92rem; margin: 0 0 2px; }
+.coffre-mission { color: var(--blanc); font-size: 0.76rem; margin: 0; opacity: 0.9; }
+.bouton-coffre {
+    background: var(--or);
+    color: var(--bordeaux-fonce);
+    font-weight: 800;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.bouton-coffre:hover { background: var(--or-clair); }
+
+/* -------- Notifications -------- */
+.bloc-notifications {
+    margin: 0 0 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.notification-item {
+    background: linear-gradient(135deg, #fff8e6, #fffdf6);
+    border-left: 4px solid var(--or);
+    border-radius: 10px;
+    padding: 10px 14px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+.notification-item p { margin: 0; font-size: 0.86rem; color: var(--gris-texte); }
+.notification-date { font-size: 0.68rem; color: #999; }
+
+.bandeau-notification {
+    margin: 0 0 18px;
+    padding: 14px 16px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #dcf8c6, #e8fce0);
+    border: 2px solid #25D366;
+    text-align: center;
+}
+.bandeau-notification p { margin: 0 0 10px; font-size: 0.88rem; color: var(--gris-texte); }
+.bouton-whatsapp {
+    background: #25D366;
+    color: var(--blanc);
+    display: inline-block;
+    width: 100%;
+}
+.bouton-whatsapp:hover { background: #1ebe57; }
+
+/* -------- En-tête royal -------- */
+.entete-royal { text-align: center; margin-bottom: 12px; }
+.eyebrow-royal {
+    font-size: 0.78rem;
+    font-weight: 800;
+    letter-spacing: 1px;
+    color: var(--bordeaux);
+    margin: 0 0 4px;
+}
+.tagline-royal {
+    font-size: 0.82rem;
+    color: #888;
+    font-style: italic;
+    margin: 0;
+}
+
+/* -------- Carte de fidélité (hero) -------- */
 .carte-fidelite {
     background: var(--blanc);
     border-radius: 20px;
@@ -404,7 +301,6 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
     border: 1px solid #eee;
 }
 
-/* -------- En-tête premium (hero) -------- */
 .carte-fidelite-hero {
     background: linear-gradient(160deg, var(--bordeaux) 0%, var(--bordeaux-fonce) 60%, #3a0000 100%);
     color: var(--blanc);
@@ -442,6 +338,16 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
 .alerte-degradation {
     background: rgba(255,255,255,0.15);
     border: 1px solid rgba(255,255,255,0.4);
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-size: 0.72rem;
+    color: var(--blanc);
+    margin: -8px 0 18px;
+    line-height: 1.4;
+}
+.alerte-preventive {
+    background: rgba(255, 200, 0, 0.18);
+    border: 1px solid rgba(255, 200, 0, 0.5);
     border-radius: 10px;
     padding: 8px 12px;
     font-size: 0.72rem;
@@ -489,6 +395,8 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
 
 .bouton-clair { background: rgba(255,255,255,0.15); color: var(--blanc); border: 1px solid rgba(255,255,255,0.4); }
 .bouton-clair:hover { background: rgba(255,255,255,0.25); }
+.bouton-clair-bordeaux { background: var(--gris-clair); color: var(--bordeaux); border: 1px solid var(--or); width: 100%; margin-top: 6px; }
+.bouton-clair-bordeaux:hover { background: var(--or-clair); }
 
 /* -------- Progression -------- */
 .titre-section {
@@ -556,32 +464,209 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
     margin: 10px 0 0;
 }
 
-/* -------- Niveaux -------- */
-.carte-fidelite-niveaux { padding: 8px 0 20px; }
-.liste-badges-niveaux {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-    padding: 0 20px;
-}
-.badge-niveau {
+/* -------- Parcours (dans Privilèges) -------- */
+.carte-privileges {
     background: var(--blanc);
-    border: 2px solid #ddd;
-    border-radius: 12px;
-    padding: 10px 8px;
-    font-size: 0.8rem;
-    cursor: pointer;
-    color: var(--gris-texte);
-    text-align: center;
-    overflow-wrap: break-word;
+    border-radius: 18px;
+    box-shadow: var(--ombre);
+    padding: 20px;
+    margin-bottom: 16px;
 }
-.badge-niveau-atteint {
+.parcours-royal {
+    display: flex;
+    flex-direction: column;
+    padding: 4px 0 0;
+}
+.parcours-etape {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+.parcours-marqueur {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex-shrink: 0;
+    width: 40px;
+}
+.parcours-diamant {
+    width: 34px; height: 34px;
+    background: var(--gris-clair);
+    border: 2px solid #ddd;
+    color: #999;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.9rem;
+    font-weight: 800;
+    transform: rotate(45deg);
+    border-radius: 6px;
+}
+.parcours-diamant span { transform: rotate(-45deg); }
+
+.parcours-corps {
+    flex: 1;
+    background: var(--blanc);
+    border: 1px solid #eee;
+    border-radius: 12px;
+    padding: 10px 12px;
+    margin-bottom: 4px;
+    text-align: left;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.parcours-corps-icone { font-size: 1.4rem; flex-shrink: 0; }
+.parcours-corps-texte { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.parcours-nom { font-weight: 700; font-size: 0.88rem; color: var(--gris-texte); }
+.parcours-seuil { font-size: 0.72rem; color: #888; }
+.parcours-recompense { font-size: 0.74rem; color: var(--bordeaux); }
+.parcours-statut-icone { font-size: 1.1rem; flex-shrink: 0; }
+.parcours-statut-verrou { opacity: 0.5; }
+
+.parcours-lien {
+    width: 3px;
+    height: 18px;
+    background: #e2ddd0;
+    margin-left: 36px;
+    border-radius: 2px;
+}
+.parcours-lien-atteint { background: var(--or); }
+
+.parcours-atteint .parcours-diamant {
     background: var(--or-clair);
-    font-weight: 700;
+    border-color: var(--or);
     color: var(--bordeaux-fonce);
 }
+.parcours-atteint .parcours-corps { border-color: var(--or-clair); background: #fffdf6; }
 
-/* -------- Partage de points (niveau 5) -------- */
+.parcours-courant .parcours-diamant {
+    background: var(--bordeaux);
+    border-color: var(--bordeaux);
+    color: var(--blanc);
+    animation: pulsation-diamant 1.8s ease-in-out infinite;
+}
+@keyframes pulsation-diamant {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(139, 0, 0, 0.5); }
+    50% { box-shadow: 0 0 0 8px rgba(139, 0, 0, 0); }
+}
+.parcours-courant .parcours-corps { border: 2px solid var(--bordeaux); background: #fffaf5; }
+.parcours-courant .parcours-nom { color: var(--bordeaux); }
+
+.parcours-verrouille .parcours-corps { opacity: 0.6; }
+.parcours-verrouille .parcours-nom { color: #999; }
+
+/* -------- Mes privilèges -------- */
+.sous-titre-privileges {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--bordeaux);
+    margin: 16px 0 8px;
+}
+.liste-privileges { display: flex; flex-direction: column; gap: 8px; }
+.privilege-item {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 10px 12px;
+    border-radius: 12px;
+}
+.privilege-debloque { background: #fff8e6; border: 1px solid var(--or-clair); }
+.privilege-a-venir { background: var(--gris-clair); border: 1px dashed #ddd; }
+.privilege-icone { font-size: 1.4rem; }
+.privilege-nom { font-weight: 700; font-size: 0.88rem; margin: 0 0 2px; }
+.privilege-detail { font-size: 0.78rem; color: #777; margin: 0; }
+
+/* -------- Missions -------- */
+.carte-missions {
+    background: var(--blanc);
+    border-radius: 18px;
+    box-shadow: var(--ombre);
+    padding: 20px;
+    margin-bottom: 16px;
+}
+.bloc-progression-jour {
+    background: linear-gradient(135deg, var(--bordeaux), var(--bordeaux-fonce));
+    border-radius: 14px;
+    padding: 12px 16px;
+    margin: 12px 0 4px;
+}
+.progression-jour-titre { color: var(--or-clair); font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 8px; }
+.progression-jour-ligne { display: flex; align-items: center; gap: 10px; }
+.progression-jour-barre {
+    flex: 1;
+    position: relative;
+    height: 22px;
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.3);
+    border-radius: 12px;
+    overflow: hidden;
+}
+.progression-jour-remplissage {
+    height: 100%;
+    background: linear-gradient(90deg, var(--or), #f0dca0);
+    transition: width 0.6s ease;
+}
+.progression-jour-texte {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.74rem;
+    font-weight: 800;
+    color: var(--blanc);
+    text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+.progression-jour-coffre { font-size: 1.5rem; flex-shrink: 0; }
+
+.liste-missions { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+.mission-item {
+    display: flex;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 14px;
+    background: var(--gris-clair);
+    border: 1px solid #eee;
+}
+.mission-icone { font-size: 1.5rem; }
+.mission-corps { flex: 1; }
+.mission-titre { font-weight: 700; font-size: 0.88rem; margin: 0 0 3px; display: flex; justify-content: space-between; gap: 6px; }
+.mission-points { color: var(--bordeaux); white-space: nowrap; }
+.mission-description { font-size: 0.78rem; color: #777; margin: 0 0 8px; }
+.mission-badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 10px;
+}
+.mission-badge-auto { background: #e8f4fb; color: #2f8fc4; }
+.mission-badge-attente { background: #fff3cd; color: #8a6d00; }
+.mission-badge-validee { background: #e3f6e3; color: #256029; }
+.mission-auto { background: #f0f8fd; border-color: #cfe8f7; }
+.mission-validee { background: #e3f6e3; border-color: #c3e6c3; }
+.mission-attente { background: #fff8e6; border-color: #f0dca0; }
+.mission-encours { background: #fdf0e5; border-color: #f0c99a; }
+
+.mission-progression { margin-top: 4px; }
+.mission-barre {
+    height: 10px;
+    background: var(--gris-clair);
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #eee;
+}
+.mission-barre-remplissage {
+    height: 100%;
+    background: linear-gradient(90deg, var(--or), var(--bordeaux));
+    transition: width 0.6s ease;
+}
+.mission-temps { font-size: 0.74rem; color: #8a5a2b; margin: 6px 0 0; }
+
+.formulaire-preuve-mission { margin-top: 6px; }
+.formulaire-preuve-mission input[type="file"] { font-size: 0.78rem; padding: 6px; margin-bottom: 6px; }
+
+/* -------- Partage / Échange -------- */
 .carte-fidelite-partage {
     margin: 0 20px 20px;
     padding: 16px;
@@ -603,7 +688,7 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
 }
 
 .carte-fidelite-echange {
-    margin: 0 20px 20px;
+    margin: 0 0 16px;
     padding: 16px;
     border-radius: 14px;
     background: linear-gradient(135deg, #e8f4fb, var(--blanc));
@@ -612,76 +697,59 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
 .bouton-echange { background: #2f8fc4; color: var(--blanc); width: 100%; margin-top: 6px; }
 .bouton-echange:hover { background: #256f9c; }
 
-.bloc-coffres {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+/* -------- Mes bons -------- */
+.carte-mes-bons {
+    background: var(--blanc);
+    border-radius: 18px;
+    box-shadow: var(--ombre);
+    padding: 20px;
     margin-bottom: 16px;
 }
-.coffre-royal {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    background: linear-gradient(135deg, var(--bordeaux), var(--bordeaux-fonce));
-    border: 2px solid var(--or);
-    border-radius: 16px;
-    padding: 14px 16px;
-    box-shadow: 0 4px 14px rgba(139, 0, 0, 0.35);
-    animation: pulsation-coffre 2s ease-in-out infinite;
+.liste-bons { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.bon-item {
+    background: linear-gradient(135deg, #fff8e6, var(--blanc));
+    border: 2px dashed var(--or);
+    border-radius: 12px;
+    padding: 12px 14px;
 }
-@keyframes pulsation-coffre {
-    0%, 100% { box-shadow: 0 4px 14px rgba(139, 0, 0, 0.35); }
-    50% { box-shadow: 0 4px 22px rgba(212, 175, 55, 0.65); }
-}
-.coffre-icone { font-size: 2rem; flex-shrink: 0; }
-.coffre-corps { flex: 1; min-width: 0; }
-.coffre-titre { color: var(--or); font-weight: 800; font-size: 0.92rem; margin: 0 0 2px; }
-.coffre-mission { color: var(--blanc); font-size: 0.76rem; margin: 0; opacity: 0.9; }
-.bouton-coffre {
-    background: var(--or);
-    color: var(--bordeaux-fonce);
+.bon-entete { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
+.bon-code {
+    font-family: monospace;
+    font-size: 1.1rem;
     font-weight: 800;
-    white-space: nowrap;
-    flex-shrink: 0;
+    letter-spacing: 2px;
+    color: var(--bordeaux);
+    background: var(--or-clair);
+    padding: 2px 10px;
+    border-radius: 8px;
 }
-.bouton-coffre:hover { background: var(--or-clair); }
+.bon-produit { font-size: 0.82rem; color: var(--gris-texte); font-weight: 600; }
+.formulaire-offrir-bon { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.formulaire-offrir-bon input { flex: 1; min-width: 140px; }
+.formulaire-offrir-bon button { width: auto; white-space: nowrap; }
 
-.bloc-notifications {
-    margin: 16px 20px 0;
+/* -------- Mon historique -------- */
+.carte-historique {
+    background: var(--blanc);
+    border-radius: 18px;
+    box-shadow: var(--ombre);
+    padding: 20px;
+    margin-bottom: 16px;
+}
+.liste-historique { display: flex; flex-direction: column; gap: 8px; }
+.historique-item {
     display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-.notification-item {
-    background: linear-gradient(135deg, #fff8e6, #fffdf6);
-    border-left: 4px solid var(--or);
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 12px;
+    background: var(--gris-clair);
     border-radius: 10px;
-    padding: 10px 14px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
 }
-.notification-item p { margin: 0; font-size: 0.86rem; color: var(--gris-texte); }
-.notification-date { font-size: 0.68rem; color: #999; }
-
-.bandeau-notification {
-    margin: 0 20px 18px;
-    padding: 14px 16px;
-    border-radius: 14px;
-    background: linear-gradient(135deg, #dcf8c6, #e8fce0);
-    border: 2px solid #25D366;
-    text-align: center;
-}
-.bandeau-notification p { margin: 0 0 10px; font-size: 0.88rem; color: var(--gris-texte); }
-.bouton-whatsapp {
-    background: #25D366;
-    color: var(--blanc);
-    display: inline-block;
-    width: 100%;
-}
-.bouton-whatsapp:hover { background: #1ebe57; }
-
-.badge-attente { background: #fff3cd; color: #8a6d00; }
-.miniature-preuve { width: 48px; height: 48px; object-fit: cover; border-radius: 8px; border: 1px solid #ddd; }
-.badge-honore { background: #d4edda; color: #256029; }
+.historique-date { font-size: 0.8rem; font-weight: 600; margin: 0; }
+.historique-note { font-size: 0.72rem; color: #888; margin: 2px 0 0; }
+.historique-montants { text-align: right; }
+.historique-montant { display: block; font-weight: 700; color: var(--bordeaux); font-size: 0.85rem; }
+.historique-points { display: block; font-size: 0.72rem; color: #2f8fc4; }
 
 /* -------- Modales -------- */
 .modale {
