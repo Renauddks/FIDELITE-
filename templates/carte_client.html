@@ -161,12 +161,13 @@
                         <span class="parcours-diamant">{{ loop.index }}</span>
                     </div>
                     <button type="button" class="parcours-corps"
-                            onclick="ouvrirNiveau('{{ niveau.icone }} {{ niveau.nom_niveau|e }}', '{{ (niveau.avantages or 'Aucun avantage renseigné pour ce niveau.')|e }}')">
+                            onclick="ouvrirNiveau('{{ niveau.icone }} {{ niveau.nom_niveau|e }}', '{% if atteint %}{{ (niveau.avantages or 'Aucun avantage renseigné pour ce niveau.')|e }}{% else %}🔒 Cet avantage sera dévoilé quand vous atteindrez ce niveau.{% endif %}')">
                         <span class="parcours-corps-icone">{{ niveau.icone }}</span>
                         <span class="parcours-corps-texte">
                             <span class="parcours-nom">{{ niveau.nom_niveau }}{% if niveau_min_partage and niveau.nombre_achats_requis >= niveau_min_partage.nombre_achats_requis %} 🎁{% endif %}</span>
                             <span class="parcours-seuil">🎯 {{ niveau.nombre_achats_requis }} achat{{ 's' if niveau.nombre_achats_requis != 1 else '' }}</span>
-                            <span class="parcours-recompense">{{ niveau.avantages or 'Avantage à venir' }}</span>
+                            {% if atteint %}<span class="parcours-recompense">{{ niveau.avantages or 'Avantage à venir' }}</span>
+                            {% else %}<span class="parcours-recompense">🔒 Avantage à découvrir</span>{% endif %}
                         </span>
                         {% if courant %}<span class="parcours-statut-icone parcours-statut-courant">📍</span>
                         {% elif atteint %}<span class="parcours-statut-icone parcours-statut-atteint">✅</span>
@@ -205,7 +206,7 @@
                     <span class="privilege-icone">{{ niveau_suivant_privilege.icone }}</span>
                     <div>
                         <p class="privilege-nom">{{ niveau_suivant_privilege.nom_niveau }}</p>
-                        <p class="privilege-detail">{{ niveau_suivant_privilege.avantages or 'Avantage à venir' }}</p>
+                        <p class="privilege-detail">🔒 Avantage à découvrir</p>
                         <p class="privilege-detail">🎯 Encore {{ progression.achats_manquants }} achat{{ 's' if progression.achats_manquants != 1 else '' }}</p>
                     </div>
                 </div>
@@ -222,6 +223,9 @@
 <div id="vue-missions" class="vue-section vue-cachee">
     <div class="carte-missions">
         <p class="titre-section">🎯 Missions bonus</p>
+        {% if client.nombre_achats < 1 %}
+        <p class="texte-verrouille">🔒 Les missions se débloquent après votre premier achat. Passez nous voir pour commencer l'aventure !</p>
+        {% else %}
         <p class="texte-aide">Réalisez ces petits défis entre deux achats pour gagner des points supplémentaires !</p>
 
         <div class="bloc-progression-jour">
@@ -291,6 +295,7 @@
             <p class="texte-verrouille">Aucune mission disponible pour le moment.</p>
             {% endfor %}
         </div>
+        {% endif %}
     </div>
 </div>
 
@@ -367,6 +372,7 @@
 <div id="vue-historique" class="vue-section vue-cachee">
     <div class="carte-historique">
         <p class="titre-section">📜 Mon historique d'achats</p>
+        <p class="texte-aide">🛍️ Achats effectués : <strong>{{ client.nombre_achats }}</strong></p>
         {% if historique %}
             <div class="liste-historique">
                 {% for achat in historique %}
@@ -376,7 +382,6 @@
                         {% if achat.note %}<p class="historique-note">{{ achat.note }}</p>{% endif %}
                     </div>
                     <div class="historique-montants">
-                        <span class="historique-montant">{{ achat.montant }} FCFA</span>
                         <span class="historique-points">+{{ achat.points_ajoutes }} pts</span>
                     </div>
                 </div>
