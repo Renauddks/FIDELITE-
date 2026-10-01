@@ -14,7 +14,6 @@ cette application doit être hébergée en ligne (ex. Render) — voir README.tx
 
 import os
 import re
-import sqlite3
 import unicodedata
 import secrets
 from datetime import datetime
@@ -22,16 +21,17 @@ from functools import wraps
 
 from flask import (
     Flask, g, render_template, request, redirect,
-    url_for, session, flash, abort
+    url_for, session, flash, abort, make_response
 )
 from werkzeug.utils import secure_filename
+
+import db_compat
 
 # ----------------------------------------------------------------------
 # CONFIGURATION
 # ----------------------------------------------------------------------
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DB_PATH = os.path.join(BASE_DIR, "fidelite.db")
 UPLOAD_FOLDER = os.path.join(BASE_DIR, "static", "uploads")
 UPLOAD_FOLDER_MISSIONS = os.path.join(BASE_DIR, "static", "uploads", "missions")
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "gif", "webp"}
@@ -61,9 +61,7 @@ NB_CASES_GRILLE = 20  # 4 lignes de 5
 
 def get_db():
     if "db" not in g:
-        g.db = sqlite3.connect(DB_PATH)
-        g.db.row_factory = sqlite3.Row
-        g.db.execute("PRAGMA foreign_keys = ON")
+        g.db = db_compat.connecter()
     return g.db
 
 
@@ -75,9 +73,9 @@ def close_db(exception=None):
 
 
 def init_db_if_needed():
-    """Crée les tables et les niveaux par défaut si la base n'existe pas encore."""
+    """Crée les tables et les niveaux par défaut si la base est vide."""
     import init_db
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_compat.connecter()
     init_db.creer_tables(conn)
     init_db.seed_niveaux(conn)
     init_db.seed_menu_echange(conn)
@@ -390,8 +388,24 @@ def extension_depuis_fichier(fichier):
     return correspondance.get(mimetype, "jpg")  # jpg par défaut si type inconnu mais accepté
 
 
+TYPES_MIME = {"jpg": "image/jpeg", "png": "image/png", "gif": "image/gif", "webp": "image/webp"}
+
+
+def sauvegarder_fichier_en_base(chemin, fichier, extension):
+    """Stocke l'image dans la base de données (le disque de Render est effacé régulièrement)."""
+    contenu = fichier.read()
+    db = get_db()
+    db.execute(
+        """INSERT INTO fichiers_media (chemin, contenu, mimetype) VALUES (?, ?, ?)
+           ON CONFLICT (chemin) DO UPDATE
+           SET contenu = EXCLUDED.contenu, mimetype = EXCLUDED.mimetype""",
+        (chemin, db_compat.Binary(contenu), TYPES_MIME.get(extension, "image/jpeg")),
+    )
+    db.commit()
+
+
 def enregistrer_photo(fichier, lien_unique):
-    """Sauvegarde la photo uploadée et renvoie le chemin relatif à stocker en base."""
+    """Sauvegarde la photo uploadée et renvoie le chemin à stocker en base."""
     if not fichier or fichier.filename == "":
         return None
     if not fichier_autorise(fichier):
@@ -399,9 +413,9 @@ def enregistrer_photo(fichier, lien_unique):
         return None
     extension = extension_depuis_fichier(fichier)
     nom_final = secure_filename(f"{lien_unique}.{extension}")
-    chemin_absolu = os.path.join(UPLOAD_FOLDER, nom_final)
-    fichier.save(chemin_absolu)
-    return f"uploads/{nom_final}"
+    chemin = f"uploads/{nom_final}"
+    sauvegarder_fichier_en_base(chemin, fichier, extension)
+    return chemin
 
 
 def enregistrer_preuve_mission(fichier, completion_id):
@@ -414,9 +428,23 @@ def enregistrer_preuve_mission(fichier, completion_id):
         return None
     extension = extension_depuis_fichier(fichier)
     nom_final = secure_filename(f"preuve-{completion_id}-{secrets.token_hex(2)}.{extension}")
-    chemin_absolu = os.path.join(UPLOAD_FOLDER_MISSIONS, nom_final)
-    fichier.save(chemin_absolu)
-    return f"uploads/missions/{nom_final}"
+    chemin = f"uploads/missions/{nom_final}"
+    sauvegarder_fichier_en_base(chemin, fichier, extension)
+    return chemin
+
+
+@app.route("/fichiers/<path:chemin>")
+def servir_fichier(chemin):
+    """Affiche une photo stockée dans la base de données."""
+    ligne = get_db().execute(
+        "SELECT contenu, mimetype FROM fichiers_media WHERE chemin = ?", (chemin,)
+    ).fetchone()
+    if ligne is None:
+        abort(404)
+    reponse = make_response(bytes(ligne["contenu"]))
+    reponse.headers["Content-Type"] = ligne["mimetype"]
+    reponse.headers["Cache-Control"] = "public, max-age=60"
+    return reponse
 
 
 # ----------------------------------------------------------------------
@@ -542,8 +570,8 @@ def carte_client(lien_unique):
     missions_validees_aujourdhui = db.execute(
         """SELECT COUNT(*) AS n FROM missions_completees
            WHERE client_id = ? AND statut = 'validee'
-                 AND date(date_validation) = date('now', 'localtime')""",
-        (client["id"],),
+                 AND substr(date_validation, 1, 10) = ?""",
+        (client["id"], datetime.now().strftime("%Y-%m-%d")),
     ).fetchone()["n"]
     missions_validees_aujourdhui = min(missions_validees_aujourdhui, total_missions_actives)
 
@@ -1010,7 +1038,7 @@ def admin_dashboard():
         motif = f"%{recherche}%"
         clients = db.execute(
             """SELECT * FROM clients_fidelite
-               WHERE nom LIKE ? OR prenom LIKE ? OR numero LIKE ?
+               WHERE nom ILIKE ? OR prenom ILIKE ? OR numero ILIKE ?
                ORDER BY date_creation DESC""",
             (motif, motif, motif),
         ).fetchall()

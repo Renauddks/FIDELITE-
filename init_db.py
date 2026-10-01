@@ -2,25 +2,23 @@
 init_db.py — Création et initialisation de la base de données FIDÉLITÉ+
 Indépendante de la base de données de SANDWICH_DU_ROI_APP.
 
-Utilisation :
-    python init_db.py
+Version PostgreSQL (Render) : la base est désignée par la variable
+d'environnement DATABASE_URL.
 
-Crée le fichier fidelite.db avec toutes les tables nécessaires et
+Crée toutes les tables nécessaires (si elles n'existent pas déjà) et
 pré-remplit les niveaux, le menu de récompenses et les missions par défaut.
 """
 
-import sqlite3
-import os
-
-DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fidelite.db")
+import db_compat
 
 
 def creer_tables(conn):
-    cur = conn.cursor()
+    # Les dates sont stockées en texte "AAAA-MM-JJ HH:MM:SS", comme avant.
+    defaut_date = "DEFAULT to_char(now(), 'YYYY-MM-DD HH24:MI:SS')"
 
-    cur.execute("""
+    conn.execute(f"""
         CREATE TABLE IF NOT EXISTS clients_fidelite (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             lien_unique TEXT NOT NULL UNIQUE,
             photo TEXT,
             nom TEXT NOT NULL,
@@ -31,18 +29,14 @@ def creer_tables(conn):
             nombre_achats INTEGER NOT NULL DEFAULT 0,
             score_points INTEGER NOT NULL DEFAULT 0,
             statut_actuel TEXT NOT NULL DEFAULT 'Bienvenue Prince',
-            date_creation TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
-            date_derniere_modification TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+            date_creation TEXT NOT NULL {defaut_date},
+            date_derniere_modification TEXT NOT NULL {defaut_date}
         )
     """)
 
-    colonnes_clients = [c[1] for c in cur.execute("PRAGMA table_info(clients_fidelite)").fetchall()]
-    if "lieu_livraison" not in colonnes_clients:
-        cur.execute("ALTER TABLE clients_fidelite ADD COLUMN lieu_livraison TEXT")
-
-    cur.execute("""
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS niveaux_fidelite (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             nom_niveau TEXT NOT NULL,
             nombre_achats_requis INTEGER NOT NULL,
             avantages TEXT,
@@ -55,69 +49,45 @@ def creer_tables(conn):
         )
     """)
 
-    # Migrations douces pour une base créée avant l'ajout de ces colonnes
-    colonnes = [c[1] for c in cur.execute("PRAGMA table_info(niveaux_fidelite)").fetchall()]
-    if "seuil_partage_points" not in colonnes:
-        cur.execute("ALTER TABLE niveaux_fidelite ADD COLUMN seuil_partage_points INTEGER")
-    if "palier_plancher" not in colonnes:
-        cur.execute("ALTER TABLE niveaux_fidelite ADD COLUMN palier_plancher INTEGER NOT NULL DEFAULT 0")
-    if "debloque_partage" not in colonnes:
-        cur.execute("ALTER TABLE niveaux_fidelite ADD COLUMN debloque_partage INTEGER NOT NULL DEFAULT 0")
-
-    cur.execute("""
+    conn.execute(f"""
         CREATE TABLE IF NOT EXISTS historique_achats (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            client_id INTEGER NOT NULL,
-            date_achat TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
-            montant REAL DEFAULT 0,
+            id SERIAL PRIMARY KEY,
+            client_id INTEGER NOT NULL REFERENCES clients_fidelite (id),
+            date_achat TEXT NOT NULL {defaut_date},
+            montant DOUBLE PRECISION DEFAULT 0,
             points_ajoutes INTEGER DEFAULT 0,
-            note TEXT,
-            FOREIGN KEY (client_id) REFERENCES clients_fidelite (id)
+            note TEXT
         )
     """)
 
-    cur.execute("""
+    conn.execute(f"""
         CREATE TABLE IF NOT EXISTS partages_points (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            client_source_id INTEGER NOT NULL,
-            client_dest_id INTEGER NOT NULL,
+            id SERIAL PRIMARY KEY,
+            client_source_id INTEGER NOT NULL REFERENCES clients_fidelite (id),
+            client_dest_id INTEGER NOT NULL REFERENCES clients_fidelite (id),
             points_partages INTEGER NOT NULL,
-            date_partage TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
-            FOREIGN KEY (client_source_id) REFERENCES clients_fidelite (id),
-            FOREIGN KEY (client_dest_id) REFERENCES clients_fidelite (id)
+            date_partage TEXT NOT NULL {defaut_date}
         )
     """)
 
-    cur.execute("""
+    conn.execute(f"""
         CREATE TABLE IF NOT EXISTS echanges_points (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            client_id INTEGER NOT NULL,
-            client_actuel_id INTEGER,
+            id SERIAL PRIMARY KEY,
+            client_id INTEGER NOT NULL REFERENCES clients_fidelite (id),
+            client_actuel_id INTEGER REFERENCES clients_fidelite (id),
             points_echanges INTEGER NOT NULL,
             nombre_bons INTEGER NOT NULL,
             statut TEXT NOT NULL DEFAULT 'en_attente',
             code_unique TEXT,
-            date_demande TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+            date_demande TEXT NOT NULL {defaut_date},
             date_traitement TEXT,
-            produit_nom TEXT,
-            FOREIGN KEY (client_id) REFERENCES clients_fidelite (id),
-            FOREIGN KEY (client_actuel_id) REFERENCES clients_fidelite (id)
+            produit_nom TEXT
         )
     """)
 
-    # Migration douce si la table existait déjà sans ces colonnes
-    colonnes_echanges = [c[1] for c in cur.execute("PRAGMA table_info(echanges_points)").fetchall()]
-    if "produit_nom" not in colonnes_echanges:
-        cur.execute("ALTER TABLE echanges_points ADD COLUMN produit_nom TEXT")
-    if "code_unique" not in colonnes_echanges:
-        cur.execute("ALTER TABLE echanges_points ADD COLUMN code_unique TEXT")
-    if "client_actuel_id" not in colonnes_echanges:
-        cur.execute("ALTER TABLE echanges_points ADD COLUMN client_actuel_id INTEGER")
-        cur.execute("UPDATE echanges_points SET client_actuel_id = client_id WHERE client_actuel_id IS NULL")
-
-    cur.execute("""
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS menu_echange (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             nom_produit TEXT NOT NULL,
             cout_points INTEGER NOT NULL,
             description TEXT,
@@ -125,9 +95,9 @@ def creer_tables(conn):
         )
     """)
 
-    cur.execute("""
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS missions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            id SERIAL PRIMARY KEY,
             titre TEXT NOT NULL,
             description TEXT,
             points_recompense INTEGER NOT NULL,
@@ -138,41 +108,38 @@ def creer_tables(conn):
             actif INTEGER NOT NULL DEFAULT 1
         )
     """)
-    colonnes_missions = [c[1] for c in cur.execute("PRAGMA table_info(missions)").fetchall()]
-    if "duree_heures" not in colonnes_missions:
-        cur.execute("ALTER TABLE missions ADD COLUMN duree_heures INTEGER")
 
-    cur.execute("""
+    conn.execute(f"""
         CREATE TABLE IF NOT EXISTS missions_completees (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            client_id INTEGER NOT NULL,
-            mission_id INTEGER NOT NULL,
+            id SERIAL PRIMARY KEY,
+            client_id INTEGER NOT NULL REFERENCES clients_fidelite (id),
+            mission_id INTEGER NOT NULL REFERENCES missions (id),
             statut TEXT NOT NULL DEFAULT 'en_attente',
             date_debut TEXT,
             preuve_photo TEXT,
             coffre_ouvert INTEGER NOT NULL DEFAULT 0,
-            date_demande TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
-            date_validation TEXT,
-            FOREIGN KEY (client_id) REFERENCES clients_fidelite (id),
-            FOREIGN KEY (mission_id) REFERENCES missions (id)
+            date_demande TEXT NOT NULL {defaut_date},
+            date_validation TEXT
         )
     """)
-    colonnes_completees = [c[1] for c in cur.execute("PRAGMA table_info(missions_completees)").fetchall()]
-    if "date_debut" not in colonnes_completees:
-        cur.execute("ALTER TABLE missions_completees ADD COLUMN date_debut TEXT")
-    if "preuve_photo" not in colonnes_completees:
-        cur.execute("ALTER TABLE missions_completees ADD COLUMN preuve_photo TEXT")
-    if "coffre_ouvert" not in colonnes_completees:
-        cur.execute("ALTER TABLE missions_completees ADD COLUMN coffre_ouvert INTEGER NOT NULL DEFAULT 0")
 
-    cur.execute("""
+    conn.execute(f"""
         CREATE TABLE IF NOT EXISTS notifications (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            client_id INTEGER NOT NULL,
+            id SERIAL PRIMARY KEY,
+            client_id INTEGER NOT NULL REFERENCES clients_fidelite (id),
             message TEXT NOT NULL,
             lu INTEGER NOT NULL DEFAULT 0,
-            date_creation TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
-            FOREIGN KEY (client_id) REFERENCES clients_fidelite (id)
+            date_creation TEXT NOT NULL {defaut_date}
+        )
+    """)
+
+    # Photos des clients et captures de preuve : stockées dans la base
+    # (le disque de Render gratuit est effacé à chaque redémarrage).
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS fichiers_media (
+            chemin TEXT PRIMARY KEY,
+            contenu BYTEA NOT NULL,
+            mimetype TEXT NOT NULL
         )
     """)
 
@@ -180,8 +147,7 @@ def creer_tables(conn):
 
 
 def seed_niveaux(conn):
-    cur = conn.cursor()
-    cur.execute("SELECT COUNT(*) FROM niveaux_fidelite")
+    cur = conn.execute("SELECT COUNT(*) FROM niveaux_fidelite")
     if cur.fetchone()[0] > 0:
         return  # déjà initialisé, on ne double pas les niveaux
 
@@ -195,7 +161,7 @@ def seed_niveaux(conn):
         ("Empereur / Impératrice", 32, "Récompense ultime : 2 menus offerts + statut permanent", "#8B0000", "🏆", 1, None, 0, 0),
     ]
 
-    cur.executemany("""
+    conn.executemany("""
         INSERT INTO niveaux_fidelite (nom_niveau, nombre_achats_requis, avantages, couleur, icone, actif, seuil_partage_points, palier_plancher, debloque_partage)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, niveaux_par_defaut)
@@ -204,8 +170,7 @@ def seed_niveaux(conn):
 
 
 def seed_menu_echange(conn):
-    cur = conn.cursor()
-    cur.execute("SELECT COUNT(*) FROM menu_echange")
+    cur = conn.execute("SELECT COUNT(*) FROM menu_echange")
     if cur.fetchone()[0] > 0:
         return  # déjà initialisé
 
@@ -215,7 +180,7 @@ def seed_menu_echange(conn):
         ("Chocolat chaud offert", 100, "Un chocolat chaud offert", 1),
     ]
 
-    cur.executemany("""
+    conn.executemany("""
         INSERT INTO menu_echange (nom_produit, cout_points, description, actif)
         VALUES (?, ?, ?, ?)
     """, menu_par_defaut)
@@ -224,8 +189,7 @@ def seed_menu_echange(conn):
 
 
 def seed_missions(conn):
-    cur = conn.cursor()
-    cur.execute("SELECT COUNT(*) FROM missions")
+    cur = conn.execute("SELECT COUNT(*) FROM missions")
     if cur.fetchone()[0] > 0:
         return  # déjà initialisé
 
@@ -237,7 +201,7 @@ def seed_missions(conn):
         ("Explorateur du menu", "Goûtez un article que vous n'avez jamais commandé", 20, "manuelle", None, None, "🎲", 1),
     ]
 
-    cur.executemany("""
+    conn.executemany("""
         INSERT INTO missions (titre, description, points_recompense, type_mission, seuil_jours, duree_heures, icone, actif)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """, missions_par_defaut)
@@ -246,13 +210,13 @@ def seed_missions(conn):
 
 
 def main():
-    conn = sqlite3.connect(DB_PATH)
+    conn = db_compat.connecter()
     creer_tables(conn)
     seed_niveaux(conn)
     seed_menu_echange(conn)
     seed_missions(conn)
     conn.close()
-    print(f"Base de données FIDÉLITÉ+ prête : {DB_PATH}")
+    print("Base de données FIDÉLITÉ+ prête (PostgreSQL).")
 
 
 if __name__ == "__main__":
