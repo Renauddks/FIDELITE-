@@ -29,8 +29,8 @@
                     <td>{{ demande.icone }} {{ demande.titre }}</td>
                     <td>
                         {% if demande.preuve_photo %}
-                        <a href="{{ url_for('static', filename=demande.preuve_photo) }}" target="_blank" rel="noopener">
-                            <img src="{{ url_for('static', filename=demande.preuve_photo) }}" alt="Preuve" class="miniature-preuve">
+                        <a href="{{ url_for('servir_fichier', chemin=demande.preuve_photo) }}" target="_blank" rel="noopener">
+                            <img src="{{ url_for('servir_fichier', chemin=demande.preuve_photo) }}" alt="Preuve" class="miniature-preuve">
                         </a>
                         {% elif demande.statut == 'en_attente' %}
                         <span class="alerte-sans-preuve">⚠️ Aucune preuve jointe</span>
