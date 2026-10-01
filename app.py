@@ -231,10 +231,7 @@ def verifier_missions_auto_retour(db, client, date_achat_precedent):
         if mission["ciblage"] == "clients" and not mission_ciblee(db, mission, client):
             continue
         if mission["seuil_jours"] is not None and jours_ecart <= mission["seuil_jours"]:
-            db.execute(
-                "UPDATE clients_fidelite SET score_points = score_points + ? WHERE id = ?",
-                (mission["points_recompense"], client["id"]),
-            )
+            accorder_recompense(db, mission, client["id"])
             db.execute(
                 """INSERT INTO missions_completees (client_id, mission_id, statut, date_validation, coffre_ouvert)
                    VALUES (?, ?, 'validee', ?, 0)""",
@@ -249,6 +246,103 @@ def notifier(db, client_id, message):
         "INSERT INTO notifications (client_id, message) VALUES (?, ?)",
         (client_id, message),
     )
+
+
+# ----------------------------------------------------------------------
+# Récompenses de missions : points, produit du menu ou avantage en nature
+# ----------------------------------------------------------------------
+TYPES_RECOMPENSE = {
+    "points": "⭐ Points de fidélité",
+    "produit": "🍔 Produit du menu",
+    "avantage": "🎁 Autre avantage en nature",
+}
+
+
+def libelle_recompense(mission):
+    """Texte lisible de la récompense d'une mission (ex. « +30 pts », « 🍔 Sandwich viennois »)."""
+    type_recompense = mission["type_recompense"] or "points"
+    points = mission["points_recompense"] or 0
+    morceaux = []
+    if points > 0:
+        morceaux.append(f"+{points} pts")
+    if type_recompense == "produit":
+        morceaux.append(f"🍔 {mission['recompense_texte'] or 'Produit offert'}")
+    elif type_recompense == "avantage":
+        morceaux.append(f"🎁 {mission['recompense_texte'] or 'Avantage offert'}")
+    return " + ".join(morceaux) or "🎁 Surprise"
+
+
+def recompense_en_nature(mission):
+    return (mission["type_recompense"] or "points") in ("produit", "avantage")
+
+
+app.jinja_env.globals["libelle_recompense"] = libelle_recompense
+app.jinja_env.globals["recompense_en_nature"] = recompense_en_nature
+
+
+def lire_recompense_formulaire(db):
+    """Lit la récompense du formulaire admin : (type, points, produit_id, texte) ou None si invalide."""
+    type_recompense = request.form.get("type_recompense", "points")
+    if type_recompense not in TYPES_RECOMPENSE:
+        type_recompense = "points"
+    try:
+        points = int(request.form.get("points_recompense", "0") or 0)
+    except ValueError:
+        points = 0
+
+    produit_id, texte = None, None
+    if type_recompense == "points":
+        points = max(1, points)
+    else:
+        points = max(0, points)
+        if type_recompense == "produit":
+            brut = request.form.get("produit_id", "")
+            produit = None
+            if brut.isdigit():
+                produit = db.execute(
+                    "SELECT * FROM menu_echange WHERE id = ?", (int(brut),)
+                ).fetchone()
+            if produit is None:
+                flash("Choisissez un produit du menu à offrir.", "danger")
+                return None
+            produit_id, texte = produit["id"], produit["nom_produit"]
+        else:
+            texte = request.form.get("recompense_texte", "").strip()[:200]
+            if not texte:
+                flash("Décrivez l'avantage offert (ex : boisson offerte).", "danger")
+                return None
+    return type_recompense, points, produit_id, texte
+
+
+def accorder_recompense(db, mission, client_id):
+    """Crédite les points et/ou génère un bon pour le produit ou l'avantage en nature.
+
+    Renvoie le code du bon généré (ou None s'il n'y a que des points).
+    """
+    points = mission["points_recompense"] or 0
+    maintenant = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    if points > 0:
+        db.execute(
+            "UPDATE clients_fidelite SET score_points = score_points + ?, date_derniere_modification = ? WHERE id = ?",
+            (points, maintenant, client_id),
+        )
+    if not recompense_en_nature(mission):
+        return None
+
+    nom = mission["recompense_texte"] or "Récompense de mission"
+    if mission["type_recompense"] == "produit" and mission["produit_id"]:
+        produit = db.execute(
+            "SELECT nom_produit FROM menu_echange WHERE id = ?", (mission["produit_id"],)
+        ).fetchone()
+        if produit:
+            nom = produit["nom_produit"]
+    code = generer_code_bon(db)
+    db.execute(
+        """INSERT INTO echanges_points (client_id, client_actuel_id, points_echanges, nombre_bons, produit_nom, code_unique)
+           VALUES (?, ?, 0, 0, ?, ?)""",
+        (client_id, client_id, f"🎯 {nom} (mission {mission['titre']})", code),
+    )
+    return code
 
 
 # ----------------------------------------------------------------------
@@ -1002,7 +1096,9 @@ def ouvrir_coffre(lien_unique, completion_id):
         notifier(
             db, client["id"],
             f"🎉 Félicitations ! Le coffre de la mission {mission['icone']} « {mission['titre']} » "
-            f"révèle +{mission['points_recompense']} points ! Nouveau solde : {client['score_points']} points."
+            f"révèle {libelle_recompense(mission)} !"
+            + (f" Nouveau solde : {client['score_points']} points." if (mission["points_recompense"] or 0) > 0 else "")
+            + (" Retrouvez votre bon dans l'onglet 🍔 Échanger." if recompense_en_nature(mission) else "")
         )
     db.commit()
 
@@ -1299,6 +1395,8 @@ def fiche_client(client_id):
         profil=profil, segments_client=segments_client, segments=SEGMENTS_CLIENTS,
         missions_perso=missions_perso, missions_assignables=missions_assignables,
         missions_realisees=missions_realisees, objectifs=OBJECTIFS_COMMERCIAUX,
+        types_recompense=TYPES_RECOMPENSE,
+        menu=db.execute("SELECT * FROM menu_echange WHERE actif = 1 ORDER BY nom_produit").fetchall(),
     )
 
 
@@ -1345,19 +1443,20 @@ def creer_mission_client(client_id):
         flash("Le titre de la mission est obligatoire.", "danger")
         return redirect(url_for("fiche_client", client_id=client_id))
     description = request.form.get("description", "").strip()
-    try:
-        points = max(1, int(request.form.get("points_recompense", "10")))
-    except ValueError:
-        points = 10
+    recompense = lire_recompense_formulaire(db)
+    if recompense is None:
+        return redirect(url_for("fiche_client", client_id=client_id))
+    type_recompense, points, produit_id, recompense_texte = recompense
     icone = request.form.get("icone", "🎯").strip() or "🎯"
     objectif = request.form.get("objectif", "").strip() or None
 
     mission_id = db.execute(
         """INSERT INTO missions (titre, description, points_recompense, type_mission, seuil_jours,
-                                 duree_heures, icone, actif, ciblage, objectif)
-           VALUES (?, ?, ?, 'manuelle', NULL, NULL, ?, 1, 'clients', ?)
+                                 duree_heures, icone, actif, ciblage, objectif,
+                                 type_recompense, produit_id, recompense_texte)
+           VALUES (?, ?, ?, 'manuelle', NULL, NULL, ?, 1, 'clients', ?, ?, ?, ?)
            RETURNING id""",
-        (titre, description, points, icone, objectif),
+        (titre, description, points, icone, objectif, type_recompense, produit_id, recompense_texte),
     ).fetchone()["id"]
     db.execute(
         "INSERT INTO missions_clients (mission_id, client_id) VALUES (?, ?)", (mission_id, client_id)
@@ -1770,6 +1869,7 @@ def gestion_missions():
     missions = db.execute("SELECT * FROM missions ORDER BY id ASC").fetchall()
     demandes = db.execute(
         """SELECT missions_completees.*, missions.titre, missions.points_recompense, missions.icone,
+                  missions.type_recompense, missions.recompense_texte,
                   clients_fidelite.nom, clients_fidelite.prenom, clients_fidelite.numero
            FROM missions_completees
            JOIN missions ON missions.id = missions_completees.mission_id
@@ -1799,7 +1899,8 @@ def gestion_missions():
     return render_template(
         "gestion_missions.html", missions=missions, demandes=demandes, clients=clients,
         cibles=cibles, nb_concernes=nb_concernes, segments=SEGMENTS_CLIENTS,
-        objectifs=OBJECTIFS_COMMERCIAUX,
+        objectifs=OBJECTIFS_COMMERCIAUX, types_recompense=TYPES_RECOMPENSE,
+        menu=db.execute("SELECT * FROM menu_echange WHERE actif = 1 ORDER BY nom_produit").fetchall(),
     )
 
 
@@ -1809,7 +1910,6 @@ def ajouter_mission():
     db = get_db()
     titre = request.form.get("titre", "").strip()
     description = request.form.get("description", "").strip()
-    points_brut = request.form.get("points_recompense", "0")
     type_mission = request.form.get("type_mission", "manuelle")
     seuil_jours_brut = request.form.get("seuil_jours", "").strip()
     duree_heures_brut = request.form.get("duree_heures", "").strip()
@@ -1819,10 +1919,10 @@ def ajouter_mission():
         flash("Le titre de la mission est obligatoire.", "danger")
         return redirect(url_for("gestion_missions"))
 
-    try:
-        points = max(1, int(points_brut))
-    except ValueError:
-        points = 1
+    recompense = lire_recompense_formulaire(db)
+    if recompense is None:
+        return redirect(url_for("gestion_missions"))
+    type_recompense, points, produit_id, recompense_texte = recompense
 
     seuil_jours = int(seuil_jours_brut) if seuil_jours_brut.isdigit() else None
     duree_heures = int(duree_heures_brut) if duree_heures_brut.isdigit() else None
@@ -1830,11 +1930,12 @@ def ajouter_mission():
 
     mission_id = db.execute(
         """INSERT INTO missions (titre, description, points_recompense, type_mission, seuil_jours,
-                                 duree_heures, icone, actif, ciblage, segment, segment_param, objectif)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+                                 duree_heures, icone, actif, ciblage, segment, segment_param, objectif,
+                                 type_recompense, produit_id, recompense_texte)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
            RETURNING id""",
         (titre, description, points, type_mission, seuil_jours, duree_heures, icone,
-         ciblage, segment, segment_param, objectif),
+         ciblage, segment, segment_param, objectif, type_recompense, produit_id, recompense_texte),
     ).fetchone()["id"]
     if ciblage == "clients":
         enregistrer_clients_cibles(db, mission_id, titre, ids_clients)
@@ -1853,17 +1954,16 @@ def modifier_mission(mission_id):
 
     titre = request.form.get("titre", mission["titre"]).strip()
     description = request.form.get("description", mission["description"])
-    points_brut = request.form.get("points_recompense", str(mission["points_recompense"]))
     type_mission = request.form.get("type_mission", mission["type_mission"])
     seuil_jours_brut = request.form.get("seuil_jours", "").strip()
     duree_heures_brut = request.form.get("duree_heures", "").strip()
     icone = request.form.get("icone", mission["icone"])
     actif = 1 if request.form.get("actif") == "on" else 0
 
-    try:
-        points = max(1, int(points_brut))
-    except ValueError:
-        points = mission["points_recompense"]
+    recompense = lire_recompense_formulaire(db)
+    if recompense is None:
+        return redirect(url_for("gestion_missions"))
+    type_recompense, points, produit_id, recompense_texte = recompense
 
     seuil_jours = int(seuil_jours_brut) if seuil_jours_brut.isdigit() else None
     duree_heures = int(duree_heures_brut) if duree_heures_brut.isdigit() else None
@@ -1874,10 +1974,11 @@ def modifier_mission(mission_id):
         """UPDATE missions
            SET titre = ?, description = ?, points_recompense = ?, type_mission = ?,
                seuil_jours = ?, duree_heures = ?, icone = ?, actif = ?,
-               ciblage = ?, segment = ?, segment_param = ?, objectif = ?
+               ciblage = ?, segment = ?, segment_param = ?, objectif = ?,
+               type_recompense = ?, produit_id = ?, recompense_texte = ?
            WHERE id = ?""",
         (titre, description, points, type_mission, seuil_jours, duree_heures, icone, actif,
-         ciblage, segment, segment_param, objectif, mission_id),
+         ciblage, segment, segment_param, objectif, type_recompense, produit_id, recompense_texte, mission_id),
     )
     enregistrer_clients_cibles(db, mission_id, titre, ids_clients if ciblage == "clients" else [])
     db.commit()
@@ -1912,17 +2013,16 @@ def valider_mission(completion_id):
         flash("Cette demande a déjà été traitée.", "warning")
         return redirect(url_for("gestion_missions"))
 
-    nouveau_solde = client["score_points"] + mission["points_recompense"]
-    db.execute(
-        "UPDATE clients_fidelite SET score_points = ?, date_derniere_modification = ? WHERE id = ?",
-        (nouveau_solde, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), client["id"]),
-    )
+    code_bon = accorder_recompense(db, mission, client["id"])
     db.execute(
         "UPDATE missions_completees SET statut = 'validee', date_validation = ?, coffre_ouvert = 0 WHERE id = ?",
         (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), completion_id),
     )
     db.commit()
-    flash("Mission validée, points crédités. Le client pourra ouvrir son coffre royal.", "success")
+    if code_bon:
+        flash(f"Mission validée : {libelle_recompense(mission)} accordé. Bon n°{code_bon} à honorer dans « Échanges ».", "success")
+    else:
+        flash("Mission validée, points crédités. Le client pourra ouvrir son coffre royal.", "success")
     return redirect(url_for("gestion_missions"))
 
 

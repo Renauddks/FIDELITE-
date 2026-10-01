@@ -115,6 +115,10 @@ def creer_tables(conn):
     conn.execute("ALTER TABLE missions ADD COLUMN IF NOT EXISTS segment TEXT")
     conn.execute("ALTER TABLE missions ADD COLUMN IF NOT EXISTS segment_param INTEGER")
     conn.execute("ALTER TABLE missions ADD COLUMN IF NOT EXISTS objectif TEXT")
+    # Récompense : points, produit du menu ou autre avantage en nature
+    conn.execute("ALTER TABLE missions ADD COLUMN IF NOT EXISTS type_recompense TEXT NOT NULL DEFAULT 'points'")
+    conn.execute("ALTER TABLE missions ADD COLUMN IF NOT EXISTS produit_id INTEGER")
+    conn.execute("ALTER TABLE missions ADD COLUMN IF NOT EXISTS recompense_texte TEXT")
 
     conn.execute(f"""
         CREATE TABLE IF NOT EXISTS missions_completees (
