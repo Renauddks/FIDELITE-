@@ -779,3 +779,9 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
     cursor: pointer;
     color: #999;
 }
+
+/* --- Missions personnalisées (admin) --- */
+.details-clients { margin: 0.5rem 0; padding: 0.5rem 0.75rem; border: 1px solid rgba(212,175,55,0.35); border-radius: 8px; max-height: 14rem; overflow-y: auto; }
+.details-clients summary { cursor: pointer; font-weight: 600; margin-bottom: 0.4rem; }
+.liste-missions-perso { list-style: none; padding: 0; margin: 0.5rem 0 1rem; }
+.liste-missions-perso li { padding: 0.4rem 0; border-bottom: 1px solid rgba(255,255,255,0.12); }
