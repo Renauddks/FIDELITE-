@@ -109,6 +109,13 @@ def creer_tables(conn):
         )
     """)
 
+    # Ciblage des missions (ajouté après la première version : ALTER ... IF NOT EXISTS
+    # met à jour les bases déjà créées sans rien perdre).
+    conn.execute("ALTER TABLE missions ADD COLUMN IF NOT EXISTS ciblage TEXT NOT NULL DEFAULT 'tous'")
+    conn.execute("ALTER TABLE missions ADD COLUMN IF NOT EXISTS segment TEXT")
+    conn.execute("ALTER TABLE missions ADD COLUMN IF NOT EXISTS segment_param INTEGER")
+    conn.execute("ALTER TABLE missions ADD COLUMN IF NOT EXISTS objectif TEXT")
+
     conn.execute(f"""
         CREATE TABLE IF NOT EXISTS missions_completees (
             id SERIAL PRIMARY KEY,
@@ -130,6 +137,14 @@ def creer_tables(conn):
             message TEXT NOT NULL,
             lu INTEGER NOT NULL DEFAULT 0,
             date_creation TEXT NOT NULL {defaut_date}
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS missions_clients (
+            mission_id INTEGER NOT NULL REFERENCES missions (id) ON DELETE CASCADE,
+            client_id INTEGER NOT NULL REFERENCES clients_fidelite (id) ON DELETE CASCADE,
+            PRIMARY KEY (mission_id, client_id)
         )
     """)
 

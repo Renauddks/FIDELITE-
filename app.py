@@ -228,6 +228,8 @@ def verifier_missions_auto_retour(db, client, date_achat_precedent):
 
     solde_courant = client["score_points"]
     for mission in missions_auto:
+        if mission["ciblage"] == "clients" and not mission_ciblee(db, mission, client):
+            continue
         if mission["seuil_jours"] is not None and jours_ecart <= mission["seuil_jours"]:
             db.execute(
                 "UPDATE clients_fidelite SET score_points = score_points + ? WHERE id = ?",
@@ -247,6 +249,141 @@ def notifier(db, client_id, message):
         "INSERT INTO notifications (client_id, message) VALUES (?, ?)",
         (client_id, message),
     )
+
+
+# ----------------------------------------------------------------------
+# Missions personnalisées : ciblage selon le comportement des clients
+# ----------------------------------------------------------------------
+SEGMENTS_CLIENTS = {
+    "nouveaux": {"nom": "🌱 Nouveaux clients", "defaut": 2, "aide": "au plus N achats"},
+    "inactifs": {"nom": "😴 Clients inactifs", "defaut": 14, "aide": "sans achat depuis N jours ou plus"},
+    "fideles": {"nom": "👑 Clients fidèles", "defaut": 10, "aide": "au moins N achats"},
+    "proches_niveau": {"nom": "🚀 Proches du niveau suivant", "defaut": 2, "aide": "à N achats ou moins du niveau suivant"},
+}
+
+OBJECTIFS_COMMERCIAUX = [
+    "Faire revenir le client",
+    "Augmenter la fréquence d'achat",
+    "Faire essayer un produit",
+    "Faire monter de niveau",
+    "Récompenser la fidélité",
+    "Attirer de nouveaux clients (parrainage)",
+    "Visibilité / avis en ligne",
+]
+
+
+def _construire_profil(client, derniere_date, niveaux_requis):
+    achats = client["nombre_achats"]
+    suivants = [r for r in niveaux_requis if r > achats]
+    return {
+        "achats": achats,
+        "jours_sans_achat": max(0, (datetime.now() - derniere_date).days),
+        "achats_manquants": (min(suivants) - achats) if suivants else None,
+    }
+
+
+def profils_clients(db, clients):
+    """Profil de comportement (achats, jours sans achat, distance au niveau suivant) de chaque client."""
+    niveaux_requis = [n["nombre_achats_requis"] for n in get_niveaux_actifs(db)]
+    dernieres = {
+        ligne["client_id"]: ligne["derniere"]
+        for ligne in db.execute(
+            "SELECT client_id, MAX(date_achat) AS derniere FROM historique_achats GROUP BY client_id"
+        ).fetchall()
+    }
+    profils = {}
+    for c in clients:
+        reference = dernieres.get(c["id"]) or c["date_creation"]
+        try:
+            derniere_date = datetime.strptime(reference, "%Y-%m-%d %H:%M:%S")
+        except (TypeError, ValueError):
+            derniere_date = datetime.now()
+        profils[c["id"]] = _construire_profil(c, derniere_date, niveaux_requis)
+    return profils
+
+
+def profil_client(db, client):
+    return profils_clients(db, [client])[client["id"]]
+
+
+def client_dans_segment(profil, segment, param=None):
+    if segment not in SEGMENTS_CLIENTS:
+        return False
+    seuil = param if param is not None else SEGMENTS_CLIENTS[segment]["defaut"]
+    if segment == "nouveaux":
+        return profil["achats"] <= seuil
+    if segment == "inactifs":
+        return profil["jours_sans_achat"] >= seuil
+    if segment == "fideles":
+        return profil["achats"] >= seuil
+    if segment == "proches_niveau":
+        return profil["achats_manquants"] is not None and profil["achats_manquants"] <= seuil
+    return False
+
+
+def mission_ciblee(db, mission, client, profil=None):
+    """True si la mission est destinée à ce client (tous / profil de clients / clients choisis)."""
+    ciblage = mission["ciblage"] or "tous"
+    if ciblage == "clients":
+        return db.execute(
+            "SELECT 1 FROM missions_clients WHERE mission_id = ? AND client_id = ?",
+            (mission["id"], client["id"]),
+        ).fetchone() is not None
+    if ciblage == "segment":
+        if profil is None:
+            profil = profil_client(db, client)
+        return client_dans_segment(profil, mission["segment"], mission["segment_param"])
+    return True
+
+
+def enregistrer_clients_cibles(db, mission_id, titre, ids):
+    """Remplace la liste des clients choisis et prévient ceux qui viennent d'être ajoutés."""
+    anciens = {
+        l["client_id"]
+        for l in db.execute(
+            "SELECT client_id FROM missions_clients WHERE mission_id = ?", (mission_id,)
+        ).fetchall()
+    }
+    nouveaux = set(ids)
+    db.execute("DELETE FROM missions_clients WHERE mission_id = ?", (mission_id,))
+    for client_id in nouveaux:
+        db.execute(
+            "INSERT INTO missions_clients (mission_id, client_id) VALUES (?, ?)",
+            (mission_id, client_id),
+        )
+    for client_id in nouveaux - anciens:
+        notifier(db, client_id, f"🎯 Nouvelle mission pour vous : {titre}")
+
+
+def lire_ciblage_formulaire(db, type_mission):
+    """Lit les champs de ciblage du formulaire admin : (ciblage, segment, param, objectif, ids_clients)."""
+    ciblage = request.form.get("ciblage", "tous")
+    if ciblage not in ("tous", "segment", "clients"):
+        ciblage = "tous"
+    segment = request.form.get("segment") or None
+    param_brut = request.form.get("segment_param", "").strip()
+    param = int(param_brut) if param_brut.isdigit() else None
+
+    if ciblage == "segment":
+        if segment not in SEGMENTS_CLIENTS:
+            flash("Aucun profil choisi : la mission reste proposée à tous les clients.", "warning")
+            ciblage, segment, param = "tous", None, None
+        elif type_mission == "auto_retour":
+            flash("Le ciblage par profil ne s'applique qu'aux missions manuelles : mission proposée à tous.", "warning")
+            ciblage, segment, param = "tous", None, None
+    else:
+        segment, param = None, None
+
+    objectif = request.form.get("objectif", "").strip() or None
+
+    ids = []
+    if ciblage == "clients":
+        existants = {l["id"] for l in db.execute("SELECT id FROM clients_fidelite").fetchall()}
+        ids = [
+            int(x) for x in request.form.getlist("clients_cibles")
+            if x.isdigit() and int(x) in existants
+        ]
+    return ciblage, segment, param, objectif, ids
 
 
 JOURS_PAR_PALIER_INACTIVITE = 30  # durée d'inactivité avant de perdre un palier de statut
@@ -528,7 +665,10 @@ def carte_client(lien_unique):
     ).fetchall()
     missions_affichees = []
     maintenant = datetime.now()
+    profil_du_client = profil_client(db, client)
     for m in missions_brutes:
+        if not mission_ciblee(db, m, client, profil_du_client):
+            continue
         derniere_demande = None
         if m["type_mission"] == "manuelle":
             derniere_demande = db.execute(
@@ -886,7 +1026,7 @@ def demarrer_mission(lien_unique, mission_id):
         "SELECT * FROM missions WHERE id = ? AND actif = 1 AND type_mission = 'manuelle'",
         (mission_id,),
     ).fetchone()
-    if mission is None:
+    if mission is None or not mission_ciblee(db, mission, client):
         flash("Cette mission n'est plus disponible.", "danger")
         return redirect(url_for("carte_client", lien_unique=lien_unique))
 
@@ -946,7 +1086,7 @@ def soumettre_mission(lien_unique, mission_id):
         "SELECT * FROM missions WHERE id = ? AND actif = 1 AND type_mission = 'manuelle'",
         (mission_id,),
     ).fetchone()
-    if mission is None:
+    if mission is None or not mission_ciblee(db, mission, client):
         flash("Cette mission n'est plus disponible.", "danger")
         return redirect(url_for("carte_client", lien_unique=lien_unique))
 
@@ -1129,12 +1269,115 @@ def fiche_client(client_id):
     ).fetchall()
     niveaux = get_niveaux_actifs(db)
     niveau_effectif, niveau_acquis, jours_inactivite, statut_degrade, alerte_preventive = get_statut_effectif(db, client)
+
+    profil = profil_client(db, client)
+    segments_client = [
+        cle for cle in SEGMENTS_CLIENTS if client_dans_segment(profil, cle)
+    ]
+    missions_perso = db.execute(
+        """SELECT missions.* FROM missions_clients
+           JOIN missions ON missions.id = missions_clients.mission_id
+           WHERE missions_clients.client_id = ? ORDER BY missions.id DESC""",
+        (client_id,),
+    ).fetchall()
+    missions_assignables = db.execute(
+        """SELECT * FROM missions
+           WHERE ciblage = 'clients' AND actif = 1
+                 AND id NOT IN (SELECT mission_id FROM missions_clients WHERE client_id = ?)
+           ORDER BY id DESC""",
+        (client_id,),
+    ).fetchall()
+    missions_realisees = db.execute(
+        "SELECT COUNT(*) AS n FROM missions_completees WHERE client_id = ? AND statut = 'validee'",
+        (client_id,),
+    ).fetchone()["n"]
     return render_template(
         "fiche_client.html", client=client, historique=historique, niveaux=niveaux,
         niveau_effectif=niveau_effectif, niveau_acquis=niveau_acquis,
         jours_inactivite=jours_inactivite, statut_degrade=statut_degrade,
         alerte_preventive=alerte_preventive,
+        profil=profil, segments_client=segments_client, segments=SEGMENTS_CLIENTS,
+        missions_perso=missions_perso, missions_assignables=missions_assignables,
+        missions_realisees=missions_realisees, objectifs=OBJECTIFS_COMMERCIAUX,
     )
+
+
+@app.route("/admin/client/<int:client_id>/missions/assigner", methods=["POST"])
+@admin_requis
+def assigner_mission_client(client_id):
+    db = get_db()
+    client = db.execute("SELECT * FROM clients_fidelite WHERE id = ?", (client_id,)).fetchone()
+    if client is None:
+        abort(404)
+    mission_brut = request.form.get("mission_id", "")
+    mission = None
+    if mission_brut.isdigit():
+        mission = db.execute(
+            "SELECT * FROM missions WHERE id = ? AND ciblage = 'clients'", (int(mission_brut),)
+        ).fetchone()
+    if mission is None:
+        flash("Choisissez une mission personnalisée à assigner.", "danger")
+        return redirect(url_for("fiche_client", client_id=client_id))
+    deja = db.execute(
+        "SELECT 1 FROM missions_clients WHERE mission_id = ? AND client_id = ?",
+        (mission["id"], client_id),
+    ).fetchone()
+    if not deja:
+        db.execute(
+            "INSERT INTO missions_clients (mission_id, client_id) VALUES (?, ?)",
+            (mission["id"], client_id),
+        )
+        notifier(db, client_id, f"🎯 Nouvelle mission pour vous : {mission['titre']}")
+        db.commit()
+    flash(f"Mission « {mission['titre']} » assignée à {client['prenom']}.", "success")
+    return redirect(url_for("fiche_client", client_id=client_id))
+
+
+@app.route("/admin/client/<int:client_id>/missions/creer", methods=["POST"])
+@admin_requis
+def creer_mission_client(client_id):
+    db = get_db()
+    client = db.execute("SELECT * FROM clients_fidelite WHERE id = ?", (client_id,)).fetchone()
+    if client is None:
+        abort(404)
+    titre = request.form.get("titre", "").strip()
+    if not titre:
+        flash("Le titre de la mission est obligatoire.", "danger")
+        return redirect(url_for("fiche_client", client_id=client_id))
+    description = request.form.get("description", "").strip()
+    try:
+        points = max(1, int(request.form.get("points_recompense", "10")))
+    except ValueError:
+        points = 10
+    icone = request.form.get("icone", "🎯").strip() or "🎯"
+    objectif = request.form.get("objectif", "").strip() or None
+
+    mission_id = db.execute(
+        """INSERT INTO missions (titre, description, points_recompense, type_mission, seuil_jours,
+                                 duree_heures, icone, actif, ciblage, objectif)
+           VALUES (?, ?, ?, 'manuelle', NULL, NULL, ?, 1, 'clients', ?)
+           RETURNING id""",
+        (titre, description, points, icone, objectif),
+    ).fetchone()["id"]
+    db.execute(
+        "INSERT INTO missions_clients (mission_id, client_id) VALUES (?, ?)", (mission_id, client_id)
+    )
+    notifier(db, client_id, f"🎯 Nouvelle mission pour vous : {titre}")
+    db.commit()
+    flash(f"Mission personnalisée créée pour {client['prenom']}.", "success")
+    return redirect(url_for("fiche_client", client_id=client_id))
+
+
+@app.route("/admin/client/<int:client_id>/missions/<int:mission_id>/retirer", methods=["POST"])
+@admin_requis
+def retirer_mission_client(client_id, mission_id):
+    db = get_db()
+    db.execute(
+        "DELETE FROM missions_clients WHERE mission_id = ? AND client_id = ?", (mission_id, client_id)
+    )
+    db.commit()
+    flash("Mission retirée pour ce client.", "warning")
+    return redirect(url_for("fiche_client", client_id=client_id))
 
 
 @app.route("/admin/client/<int:client_id>/ajouter_achat", methods=["POST"])
@@ -1536,7 +1779,28 @@ def gestion_missions():
                CASE WHEN missions_completees.statut = 'en_attente' THEN 0 ELSE 1 END,
                missions_completees.date_demande DESC"""
     ).fetchall()
-    return render_template("gestion_missions.html", missions=missions, demandes=demandes)
+    clients = db.execute(
+        "SELECT id, nom, prenom, nombre_achats, date_creation FROM clients_fidelite ORDER BY prenom, nom"
+    ).fetchall()
+    cibles = {}
+    for ligne in db.execute("SELECT mission_id, client_id FROM missions_clients").fetchall():
+        cibles.setdefault(ligne["mission_id"], []).append(ligne["client_id"])
+    profils = profils_clients(db, clients)
+    nb_concernes = {}
+    for m in missions:
+        if m["ciblage"] == "clients":
+            nb_concernes[m["id"]] = len(cibles.get(m["id"], []))
+        elif m["ciblage"] == "segment":
+            nb_concernes[m["id"]] = sum(
+                1 for c in clients if client_dans_segment(profils[c["id"]], m["segment"], m["segment_param"])
+            )
+        else:
+            nb_concernes[m["id"]] = len(clients)
+    return render_template(
+        "gestion_missions.html", missions=missions, demandes=demandes, clients=clients,
+        cibles=cibles, nb_concernes=nb_concernes, segments=SEGMENTS_CLIENTS,
+        objectifs=OBJECTIFS_COMMERCIAUX,
+    )
 
 
 @app.route("/admin/missions/ajouter", methods=["POST"])
@@ -1562,12 +1826,18 @@ def ajouter_mission():
 
     seuil_jours = int(seuil_jours_brut) if seuil_jours_brut.isdigit() else None
     duree_heures = int(duree_heures_brut) if duree_heures_brut.isdigit() else None
+    ciblage, segment, segment_param, objectif, ids_clients = lire_ciblage_formulaire(db, type_mission)
 
-    db.execute(
-        """INSERT INTO missions (titre, description, points_recompense, type_mission, seuil_jours, duree_heures, icone, actif)
-           VALUES (?, ?, ?, ?, ?, ?, ?, 1)""",
-        (titre, description, points, type_mission, seuil_jours, duree_heures, icone),
-    )
+    mission_id = db.execute(
+        """INSERT INTO missions (titre, description, points_recompense, type_mission, seuil_jours,
+                                 duree_heures, icone, actif, ciblage, segment, segment_param, objectif)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+           RETURNING id""",
+        (titre, description, points, type_mission, seuil_jours, duree_heures, icone,
+         ciblage, segment, segment_param, objectif),
+    ).fetchone()["id"]
+    if ciblage == "clients":
+        enregistrer_clients_cibles(db, mission_id, titre, ids_clients)
     db.commit()
     flash("Mission ajoutée.", "success")
     return redirect(url_for("gestion_missions"))
@@ -1598,13 +1868,18 @@ def modifier_mission(mission_id):
     seuil_jours = int(seuil_jours_brut) if seuil_jours_brut.isdigit() else None
     duree_heures = int(duree_heures_brut) if duree_heures_brut.isdigit() else None
 
+    ciblage, segment, segment_param, objectif, ids_clients = lire_ciblage_formulaire(db, type_mission)
+
     db.execute(
         """UPDATE missions
            SET titre = ?, description = ?, points_recompense = ?, type_mission = ?,
-               seuil_jours = ?, duree_heures = ?, icone = ?, actif = ?
+               seuil_jours = ?, duree_heures = ?, icone = ?, actif = ?,
+               ciblage = ?, segment = ?, segment_param = ?, objectif = ?
            WHERE id = ?""",
-        (titre, description, points, type_mission, seuil_jours, duree_heures, icone, actif, mission_id),
+        (titre, description, points, type_mission, seuil_jours, duree_heures, icone, actif,
+         ciblage, segment, segment_param, objectif, mission_id),
     )
+    enregistrer_clients_cibles(db, mission_id, titre, ids_clients if ciblage == "clients" else [])
     db.commit()
     flash("Mission modifiée.", "success")
     return redirect(url_for("gestion_missions"))
