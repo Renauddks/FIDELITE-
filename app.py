@@ -878,6 +878,10 @@ def demarrer_mission(lien_unique, mission_id):
     if client is None:
         abort(404)
 
+    if client["nombre_achats"] < 1:
+        flash("Les missions se débloquent après votre premier achat.", "warning")
+        return redirect(url_for("carte_client", lien_unique=lien_unique))
+
     mission = db.execute(
         "SELECT * FROM missions WHERE id = ? AND actif = 1 AND type_mission = 'manuelle'",
         (mission_id,),
@@ -933,6 +937,10 @@ def soumettre_mission(lien_unique, mission_id):
     ).fetchone()
     if client is None:
         abort(404)
+
+    if client["nombre_achats"] < 1:
+        flash("Les missions se débloquent après votre premier achat.", "warning")
+        return redirect(url_for("carte_client", lien_unique=lien_unique))
 
     mission = db.execute(
         "SELECT * FROM missions WHERE id = ? AND actif = 1 AND type_mission = 'manuelle'",
