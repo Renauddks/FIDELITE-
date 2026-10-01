@@ -76,7 +76,7 @@
         <ul class="liste-missions-perso">
             {% for m in missions_perso %}
             <li>
-                {{ m.icone }} <strong>{{ m.titre }}</strong> (+{{ m.points_recompense }} pts){% if m.objectif %} · 🎯 {{ m.objectif }}{% endif %}
+                {{ m.icone }} <strong>{{ m.titre }}</strong> ({{ libelle_recompense(m) }}){% if m.objectif %} · 🎯 {{ m.objectif }}{% endif %}
                 <form method="POST" action="{{ url_for('retirer_mission_client', client_id=client.id, mission_id=m.id) }}" style="display:inline;" data-confirmation="Retirer cette mission pour {{ client.prenom }} ?">
                     <button type="submit" class="bouton bouton-danger bouton-mini">Retirer</button>
                 </form>
@@ -98,7 +98,15 @@
         <h3>Créer une mission pour {{ client.prenom }}</h3>
         <form method="POST" action="{{ url_for('creer_mission_client', client_id=client.id) }}">
             <input type="text" name="titre" placeholder="Titre (ex : Essayez notre nouveau sandwich)" required>
-            <input type="number" name="points_recompense" placeholder="Points offerts" min="1" value="20" required>
+            <select name="type_recompense">
+                {% for cle, nom in types_recompense.items() %}<option value="{{ cle }}">{{ nom }}</option>{% endfor %}
+            </select>
+            <input type="number" name="points_recompense" placeholder="Points offerts (obligatoire si « Points »)" min="0" value="20">
+            <select name="produit_id">
+                <option value="">— Produit du menu (si « Produit ») —</option>
+                {% for p in menu %}<option value="{{ p.id }}">{{ p.nom_produit }}</option>{% endfor %}
+            </select>
+            <input type="text" name="recompense_texte" maxlength="200" placeholder="Avantage en nature (si « Autre avantage »)">
             <input type="text" name="icone" placeholder="Icône (emoji)" maxlength="4" value="🎯">
             <select name="objectif">
                 <option value="">— Objectif commercial —</option>

@@ -1,5 +1,25 @@
 {% extends "_base.html" %}
 {% block titre %}Missions{% endblock %}
+{% macro champs_recompense(mission=none) %}
+        <label>🎁 Type de récompense</label>
+        <select name="type_recompense">
+            {% for cle, nom in types_recompense.items() %}
+            <option value="{{ cle }}" {% if (mission.type_recompense if mission else 'points') == cle %}selected{% endif %}>{{ nom }}</option>
+            {% endfor %}
+        </select>
+        <label>Points offerts (obligatoire pour « Points », bonus facultatif sinon)</label>
+        <input type="number" name="points_recompense" min="0" placeholder="Points offerts" value="{{ mission.points_recompense if mission else '' }}">
+        <label>Produit du menu (si « Produit du menu »)</label>
+        <select name="produit_id">
+            <option value="">— Choisir un produit —</option>
+            {% for p in menu %}
+            <option value="{{ p.id }}" {% if mission and mission.produit_id == p.id %}selected{% endif %}>{{ p.nom_produit }}</option>
+            {% endfor %}
+        </select>
+        <label>Avantage en nature (si « Autre avantage »)</label>
+        <input type="text" name="recompense_texte" maxlength="200" placeholder="Ex : boisson offerte, livraison gratuite…" value="{{ (mission.recompense_texte or '') if mission and mission.type_recompense == 'avantage' else '' }}">
+{% endmacro %}
+
 {% macro champs_ciblage(mission=none, cibles_mission=[]) %}
         <label>🎯 Objectif commercial</label>
         <select name="objectif">
@@ -49,7 +69,7 @@
                     <th>Numéro</th>
                     <th>Mission</th>
                     <th>Preuve</th>
-                    <th>Points</th>
+                    <th>Récompense</th>
                     <th>Date</th>
                     <th>Statut</th>
                     <th></th>
@@ -70,7 +90,7 @@
                         <span class="alerte-sans-preuve">⚠️ Aucune preuve jointe</span>
                         {% else %}—{% endif %}
                     </td>
-                    <td>{{ demande.points_recompense }}</td>
+                    <td>{{ libelle_recompense(demande) }}</td>
                     <td>{{ demande.date_demande }}</td>
                     <td>
                         {% if demande.statut == 'en_attente' %}
@@ -104,7 +124,7 @@
     <h2>Ajouter une mission</h2>
     <form method="POST" action="{{ url_for('ajouter_mission') }}" class="formulaire-niveau">
         <input type="text" name="titre" placeholder="Titre de la mission" required>
-        <input type="number" name="points_recompense" placeholder="Points offerts" min="1" required>
+        {{ champs_recompense() }}
         <input type="text" name="icone" placeholder="Icône (emoji)" maxlength="4" value="🎯">
         <select name="type_mission">
             <option value="manuelle">Manuelle (validée par vous)</option>
@@ -128,8 +148,7 @@
         <input type="text" name="titre" value="{{ mission.titre }}" class="champ-nom-pleine-largeur">
         <label>Description</label>
         <textarea name="description" rows="2">{{ mission.description or '' }}</textarea>
-        <label>Points offerts</label>
-        <input type="number" name="points_recompense" value="{{ mission.points_recompense }}" min="1">
+        {{ champs_recompense(mission) }}
         <label>Type</label>
         <select name="type_mission">
             <option value="manuelle" {% if mission.type_mission == 'manuelle' %}selected{% endif %}>Manuelle (validée par vous)</option>

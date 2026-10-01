@@ -244,7 +244,7 @@
             <div class="mission-item {% if mission.type_mission == 'auto_retour' %}mission-auto{% elif mission.statut_client == 'validee' %}mission-validee{% elif mission.statut_client == 'en_attente' %}mission-attente{% elif mission.statut_client == 'en_cours' %}mission-encours{% endif %}">
                 <span class="mission-icone">{{ mission.icone }}</span>
                 <div class="mission-corps">
-                    <p class="mission-titre">{{ mission.titre }} <span class="mission-points">+{{ mission.points_recompense }} pts</span></p>
+                    <p class="mission-titre">{{ mission.titre }} <span class="mission-points">{{ libelle_recompense(mission) }}</span></p>
                     {% if mission.ciblage != 'tous' %}<span class="mission-badge">✨ Mission pour vous</span>{% endif %}
                     <p class="mission-description">{{ mission.description }}</p>
 
@@ -353,7 +353,7 @@
                 <div class="bon-item">
                     <div class="bon-entete">
                         <span class="bon-code">{{ bon.code_unique }}</span>
-                        <span class="bon-produit">{{ bon.produit_nom }} ({{ bon.points_echanges }} pts)</span>
+                        <span class="bon-produit">{{ bon.produit_nom }}{% if bon.points_echanges %} ({{ bon.points_echanges }} pts){% else %} (offert){% endif %}</span>
                     </div>
                     <p class="texte-aide">Présentez ce code au comptoir Sandwich du Roi pour en profiter.</p>
                     <form method="POST" action="{{ url_for('offrir_bon', lien_unique=client.lien_unique, echange_id=bon.id) }}" class="formulaire-offrir-bon">

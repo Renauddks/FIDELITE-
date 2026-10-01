@@ -31,7 +31,7 @@
                 </td>
                 <td>{{ echange.numero or '—' }}</td>
                 <td>{{ echange.produit_nom or (echange.nombre_bons ~ ' bon(s)') }}</td>
-                <td>{{ echange.points_echanges }}</td>
+                <td>{{ echange.points_echanges if echange.points_echanges else '🎯 offert (mission)' }}</td>
                 <td>{{ echange.date_demande }}</td>
                 <td>
                     {% if echange.statut == 'en_attente' %}
