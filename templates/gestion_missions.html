@@ -1,5 +1,39 @@
 {% extends "_base.html" %}
 {% block titre %}Missions{% endblock %}
+{% macro champs_ciblage(mission=none, cibles_mission=[]) %}
+        <label>🎯 Objectif commercial</label>
+        <select name="objectif">
+            <option value="">— Aucun objectif précis —</option>
+            {% for o in objectifs %}
+            <option value="{{ o }}" {% if mission and mission.objectif == o %}selected{% endif %}>{{ o }}</option>
+            {% endfor %}
+        </select>
+        <label>👥 Qui voit cette mission ?</label>
+        <select name="ciblage">
+            <option value="tous" {% if not mission or mission.ciblage == 'tous' %}selected{% endif %}>Tous les clients</option>
+            <option value="segment" {% if mission and mission.ciblage == 'segment' %}selected{% endif %}>Un profil de clients (comportement)</option>
+            <option value="clients" {% if mission and mission.ciblage == 'clients' %}selected{% endif %}>Des clients choisis un par un</option>
+        </select>
+        <label>Profil de clients (si « Un profil »)</label>
+        <select name="segment">
+            <option value="">— Choisir un profil —</option>
+            {% for cle, seg in segments.items() %}
+            <option value="{{ cle }}" {% if mission and mission.segment == cle %}selected{% endif %}>{{ seg.nom }} — {{ seg.aide }} (N par défaut : {{ seg.defaut }})</option>
+            {% endfor %}
+        </select>
+        <input type="number" name="segment_param" min="0" placeholder="N du profil (vide = valeur par défaut)" value="{{ mission.segment_param if mission and mission.segment_param is not none else '' }}">
+        <details class="details-clients">
+            <summary>Clients choisis (si « Des clients choisis »)</summary>
+            {% for c in clients %}
+            <label class="case-actif">
+                <input type="checkbox" name="clients_cibles" value="{{ c.id }}" {% if c.id in cibles_mission %}checked{% endif %}>
+                {{ c.prenom }} {{ c.nom }} · {{ c.nombre_achats }} achat{{ 's' if c.nombre_achats != 1 else '' }}
+            </label>
+            {% else %}
+            <p class="texte-aide">Aucun client enregistré.</p>
+            {% endfor %}
+        </details>
+{% endmacro %}
 {% block contenu %}
 <a href="{{ url_for('admin_dashboard') }}" class="lien-retour">&larr; Retour au tableau de bord</a>
 
@@ -79,6 +113,7 @@
         <input type="number" name="seuil_jours" placeholder="Délai en jours (si automatique)" min="1">
         <input type="number" name="duree_heures" placeholder="Durée en heures (si mission chronométrée)" min="1">
         <textarea name="description" placeholder="Description affichée au client" rows="2"></textarea>
+        {{ champs_ciblage() }}
         <button type="submit" class="bouton bouton-principal">+ Ajouter</button>
     </form>
 </section>
@@ -104,6 +139,12 @@
         <input type="number" name="seuil_jours" value="{{ mission.seuil_jours or '' }}" min="1">
         <label>Durée en heures (si mission chronométrée)</label>
         <input type="number" name="duree_heures" value="{{ mission.duree_heures or '' }}" min="1">
+        {{ champs_ciblage(mission, cibles.get(mission.id, [])) }}
+        <p class="texte-aide">
+            👥 {{ nb_concernes[mission.id] }} client{{ 's' if nb_concernes[mission.id] != 1 else '' }} concerné{{ 's' if nb_concernes[mission.id] != 1 else '' }}
+            {% if mission.ciblage == 'segment' and mission.segment in segments %}· Profil : {{ segments[mission.segment].nom }}{% elif mission.ciblage == 'clients' %}· Clients choisis{% else %}· Tous les clients{% endif %}
+            {% if mission.objectif %}· 🎯 {{ mission.objectif }}{% endif %}
+        </p>
         <label class="case-actif">
             <input type="checkbox" name="actif" {% if mission.actif %}checked{% endif %}>
             Mission active

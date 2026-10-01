@@ -18,6 +18,15 @@
         <div class="fiche-stat"><span class="fiche-stat-valeur">{{ client.nombre_achats }}</span><span>Achats</span></div>
         <div class="fiche-stat"><span class="fiche-stat-valeur">{{ client.score_points }}</span><span>Points</span></div>
     </div>
+    <p class="fiche-meta">
+        🕒 Dernier achat : {% if client.nombre_achats > 0 or historique %}il y a {{ profil.jours_sans_achat }} jour{{ 's' if profil.jours_sans_achat != 1 else '' }}{% else %}aucun achat enregistré{% endif %}
+        · ✅ {{ missions_realisees }} mission{{ 's' if missions_realisees != 1 else '' }} réalisée{{ 's' if missions_realisees != 1 else '' }}
+        {% if profil.achats_manquants is not none %}· 🚀 {{ profil.achats_manquants }} achat{{ 's' if profil.achats_manquants != 1 else '' }} avant le niveau suivant{% endif %}
+    </p>
+    <p class="fiche-meta">
+        🧭 Profil :
+        {% for cle in segments_client %}<span class="badge-statut">{{ segments[cle].nom }}</span> {% else %}<span class="texte-aide">aucun profil particulier pour l'instant</span>{% endfor %}
+    </p>
     {% if statut_degrade %}
     <p class="texte-aide">⏳ Statut réduit pour inactivité ({{ jours_inactivite }} jours sans achat) — niveau réellement acquis : <strong>{{ niveau_acquis.nom_niveau }}</strong>, restauré au prochain achat.</p>
     {% endif %}
@@ -57,6 +66,47 @@
             <button type="submit" class="bouton bouton-secondaire">Corriger</button>
         </form>
         <p class="texte-aide">Utile uniquement en cas d'erreur de saisie — préférez "Enregistrer un achat" au quotidien.</p>
+    </section>
+
+    <section class="carte-formulaire">
+        <h2>🎯 Missions personnalisées</h2>
+        <p class="texte-aide">Missions visibles uniquement par {{ client.prenom }}, pour l'orienter vers vos objectifs commerciaux.</p>
+
+        {% if missions_perso %}
+        <ul class="liste-missions-perso">
+            {% for m in missions_perso %}
+            <li>
+                {{ m.icone }} <strong>{{ m.titre }}</strong> (+{{ m.points_recompense }} pts){% if m.objectif %} · 🎯 {{ m.objectif }}{% endif %}
+                <form method="POST" action="{{ url_for('retirer_mission_client', client_id=client.id, mission_id=m.id) }}" style="display:inline;" data-confirmation="Retirer cette mission pour {{ client.prenom }} ?">
+                    <button type="submit" class="bouton bouton-danger bouton-mini">Retirer</button>
+                </form>
+            </li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+
+        {% if missions_assignables %}
+        <form method="POST" action="{{ url_for('assigner_mission_client', client_id=client.id) }}" class="formulaire-ligne">
+            <select name="mission_id" required>
+                <option value="">Assigner une mission existante…</option>
+                {% for m in missions_assignables %}<option value="{{ m.id }}">{{ m.icone }} {{ m.titre }}</option>{% endfor %}
+            </select>
+            <button type="submit" class="bouton bouton-secondaire">Assigner</button>
+        </form>
+        {% endif %}
+
+        <h3>Créer une mission pour {{ client.prenom }}</h3>
+        <form method="POST" action="{{ url_for('creer_mission_client', client_id=client.id) }}">
+            <input type="text" name="titre" placeholder="Titre (ex : Essayez notre nouveau sandwich)" required>
+            <input type="number" name="points_recompense" placeholder="Points offerts" min="1" value="20" required>
+            <input type="text" name="icone" placeholder="Icône (emoji)" maxlength="4" value="🎯">
+            <select name="objectif">
+                <option value="">— Objectif commercial —</option>
+                {% for o in objectifs %}<option value="{{ o }}">{{ o }}</option>{% endfor %}
+            </select>
+            <textarea name="description" placeholder="Ce que le client doit faire" rows="2"></textarea>
+            <button type="submit" class="bouton bouton-principal">+ Créer et envoyer à {{ client.prenom }}</button>
+        </form>
     </section>
 
     <section class="carte-formulaire carte-formulaire-danger">

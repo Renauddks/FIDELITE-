@@ -245,6 +245,7 @@
                 <span class="mission-icone">{{ mission.icone }}</span>
                 <div class="mission-corps">
                     <p class="mission-titre">{{ mission.titre }} <span class="mission-points">+{{ mission.points_recompense }} pts</span></p>
+                    {% if mission.ciblage != 'tous' %}<span class="mission-badge">✨ Mission pour vous</span>{% endif %}
                     <p class="mission-description">{{ mission.description }}</p>
 
                     {% if mission.type_mission == 'auto_retour' %}
