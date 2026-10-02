@@ -6,7 +6,11 @@
     <title>{% block titre %}FIDÉLITÉ+{% endblock %} — Sandwich du Roi</title>
 
     <link rel="icon" href="{{ url_for('static', filename='images/favicon.png') }}" type="image/png">
-    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/favicon-192.png') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/icone-app-180.png') }}">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="FIDÉLITÉ+">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 
     <!-- Aperçu de partage (WhatsApp, SMS, email...) -->
     <meta property="og:type" content="website">
@@ -15,6 +19,7 @@
     <meta property="og:description" content="{% block og_description %}Venez à la découverte de nouvelles saveurs !!! Consultez votre carte de fidélité Sandwich du Roi.{% endblock %}">
     <meta property="og:image" content="{{ url_for('static', filename='images/logo-complet.png', _external=True) }}">
     <meta name="theme-color" content="#8B0000">
+    {% block tete %}{% endblock %}
 
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
@@ -47,5 +52,12 @@
 
     <script src="{{ url_for('static', filename='js/script.js') }}"></script>
     {% block script_page %}{% endblock %}
+    <script>
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+            navigator.serviceWorker.register('/sw.js').catch(function () {});
+        });
+    }
+    </script>
 </body>
 </html>

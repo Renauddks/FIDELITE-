@@ -2,7 +2,19 @@
 {% block titre %}Carte de {{ client.prenom }}{% endblock %}
 {% block og_titre %}👑 L'ascension royale de {{ client.prenom }} {{ client.nom }}{% endblock %}
 {% block og_description %}{{ niveau_effectif.nom_niveau if niveau_effectif else client.statut_actuel }} · {{ client.nombre_achats }} achat{{ 's' if client.nombre_achats != 1 else '' }} · Sandwich du Roi{% endblock %}
+{% block tete %}<link rel="manifest" href="{{ url_for('manifest_client', lien_unique=client.lien_unique) }}">{% endblock %}
 {% block contenu %}
+
+<!-- Installation de l'application sur le téléphone -->
+<div id="bloc-installer" class="bloc-installer" hidden>
+    <p class="installer-titre">📲 Gardez votre carte sur votre téléphone</p>
+    <p id="installer-texte" class="installer-texte"></p>
+    <div class="installer-actions">
+        <button type="button" id="installer-bouton" class="bouton bouton-principal" hidden>📲 Installer l'application</button>
+        <button type="button" id="installer-copier" class="bouton bouton-secondaire" hidden>📋 Copier le lien</button>
+        <button type="button" id="installer-fermer" class="bouton-lien">Plus tard</button>
+    </div>
+</div>
 
 <!-- Navigation par icônes -->
 <div class="nav-icones">
@@ -434,6 +446,81 @@ function ouvrirNiveau(titre, avantages) {
     document.getElementById('modale-niveau-avantages').textContent = avantages;
     document.getElementById('modale-niveau').classList.add('modale-visible');
 }
+
+(function () {
+    var bloc = document.getElementById('bloc-installer');
+    if (!bloc) return;
+    var texte = document.getElementById('installer-texte');
+    var boutonInstaller = document.getElementById('installer-bouton');
+    var boutonCopier = document.getElementById('installer-copier');
+    var ua = navigator.userAgent || '';
+
+    function lire() { try { return localStorage.getItem('installer-masque'); } catch (e) { return null; } }
+    function ecrire() { try { localStorage.setItem('installer-masque', String(Date.now())); } catch (e) {} }
+
+    var dejaInstallee = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+    var masque = lire();
+    if (dejaInstallee || (masque && Date.now() - Number(masque) < 7 * 24 * 3600 * 1000)) return;
+
+    var estIOS = /iPhone|iPad|iPod/i.test(ua);
+    var estAndroid = /Android/i.test(ua);
+    var navigateurInterne = /FBAN|FBAV|FB_IAB|Instagram|TikTok|musical_ly|Snapchat|Line\/|MicroMessenger|; wv\)|WhatsApp|Telegram/i.test(ua);
+    var promptInstallation = null;
+
+    function afficher(message) { texte.textContent = message; bloc.hidden = false; }
+
+    document.getElementById('installer-fermer').addEventListener('click', function () { ecrire(); bloc.hidden = true; });
+
+    boutonCopier.addEventListener('click', function () {
+        var lien = window.location.href;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(lien).then(function () { boutonCopier.textContent = '✅ Lien copié'; });
+        } else {
+            window.prompt('Copiez ce lien :', lien);
+        }
+    });
+
+    if (navigateurInterne) {
+        afficher(estIOS
+            ? "Vous êtes dans un navigateur intégré (WhatsApp, Facebook…) qui ne permet pas l'installation. Copiez le lien, ouvrez Safari et collez-le dans la barre d'adresse."
+            : "Vous êtes dans un navigateur intégré (WhatsApp, Facebook…) qui ne permet pas l'installation. Copiez le lien, ouvrez Chrome et collez-le dans la barre d'adresse.");
+        boutonCopier.hidden = false;
+        return;
+    }
+
+    if (estIOS) {
+        var estSafari = /Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS|OPiOS/i.test(ua);
+        afficher(estSafari
+            ? "Sur iPhone : touchez le bouton Partager (le carré avec une flèche vers le haut, en bas de l'écran), puis « Sur l'écran d'accueil », puis « Ajouter »."
+            : "Sur iPhone, l'installation se fait depuis Safari. Copiez le lien, ouvrez Safari, collez-le, puis touchez Partager → « Sur l'écran d'accueil ».");
+        if (!estSafari) boutonCopier.hidden = false;
+        return;
+    }
+
+    window.addEventListener('beforeinstallprompt', function (evenement) {
+        evenement.preventDefault();
+        promptInstallation = evenement;
+        afficher("Installez l'application pour retrouver votre carte en un geste, comme une vraie application.");
+        boutonInstaller.hidden = false;
+    });
+
+    boutonInstaller.addEventListener('click', function () {
+        if (!promptInstallation) return;
+        promptInstallation.prompt();
+        promptInstallation.userChoice.then(function () { promptInstallation = null; bloc.hidden = true; });
+    });
+
+    window.addEventListener('appinstalled', function () { bloc.hidden = true; });
+
+    if (estAndroid) {
+        setTimeout(function () {
+            if (!promptInstallation && bloc.hidden) {
+                afficher("Sur Android : ouvrez le menu du navigateur (⋮ en haut à droite), puis touchez « Installer l'application » ou « Ajouter à l'écran d'accueil ». Si vous ne voyez rien, ouvrez ce lien dans Chrome.");
+                boutonCopier.hidden = false;
+            }
+        }, 3500);
+    }
+})();
 
 function changerVue(vue) {
     document.querySelectorAll('.vue-section').forEach(function (el) {
