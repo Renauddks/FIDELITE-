@@ -12,6 +12,7 @@ Pour un accès réel des clients à leurs liens individuels depuis l'extérieur,
 cette application doit être hébergée en ligne (ex. Render) — voir README.txt.
 """
 
+import json
 import os
 import re
 import unicodedata
@@ -721,6 +722,100 @@ def accueil():
 # ----------------------------------------------------------------------
 # CARTE CLIENT (accès public via lien individuel)
 # ----------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
+# INSTALLATION SUR LE TÉLÉPHONE (application web installable / PWA)
+# ----------------------------------------------------------------------
+
+@app.route("/carte/<lien_unique>/manifest.webmanifest")
+def manifest_client(lien_unique):
+    """Description de l'application : à l'ouverture, elle affiche directement la carte du client."""
+    client = get_db().execute(
+        "SELECT prenom FROM clients_fidelite WHERE lien_unique = ?", (lien_unique,)
+    ).fetchone()
+    if client is None:
+        abort(404)
+    adresse_carte = url_for("carte_client", lien_unique=lien_unique)
+    manifeste = {
+        "id": adresse_carte,
+        "name": "FIDÉLITÉ+ — Sandwich du Roi",
+        "short_name": "FIDÉLITÉ+",
+        "description": "Votre carte de fidélité Sandwich du Roi",
+        "lang": "fr",
+        "start_url": adresse_carte,
+        "scope": "/",
+        "display": "standalone",
+        "orientation": "portrait",
+        "background_color": "#8B0000",
+        "theme_color": "#8B0000",
+        "icons": [
+            {"src": url_for("static", filename="images/icone-app-192.png"),
+             "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+            {"src": url_for("static", filename="images/icone-app-512.png"),
+             "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
+        ],
+    }
+    reponse = make_response(json.dumps(manifeste, ensure_ascii=False))
+    reponse.headers["Content-Type"] = "application/manifest+json; charset=utf-8"
+    reponse.headers["Cache-Control"] = "no-cache"
+    return reponse
+
+
+SERVICE_WORKER_JS = """
+// FIDÉLITÉ+ — service worker minimal : toujours le réseau d'abord (points à jour),
+// avec une page de secours si le téléphone est hors connexion.
+const CACHE = 'fidelite-statique-v1';
+const PAGE_HORS_LIGNE = '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">' +
+  '<meta name="viewport" content="width=device-width, initial-scale=1.0"><title>Hors connexion</title></head>' +
+  '<body style="font-family:sans-serif;text-align:center;padding:3rem 1.5rem;background:#8B0000;color:#fff">' +
+  '<h1>📶 Pas de connexion</h1><p>Vérifiez votre connexion internet puis rouvrez votre carte FIDÉLITÉ+.</p>' +
+  '<button onclick="location.reload()" style="padding:.8rem 1.4rem;border:0;border-radius:8px;font-size:1rem">Réessayer</button>' +
+  '</body></html>';
+
+self.addEventListener('install', function () { self.skipWaiting(); });
+
+self.addEventListener('activate', function (event) {
+  event.waitUntil(
+    caches.keys().then(function (noms) {
+      return Promise.all(noms.filter(function (n) { return n !== CACHE; }).map(function (n) { return caches.delete(n); }));
+    }).then(function () { return self.clients.claim(); })
+  );
+});
+
+self.addEventListener('fetch', function (event) {
+  const requete = event.request;
+  if (requete.method !== 'GET') return;
+  const url = new URL(requete.url);
+  if (url.origin !== self.location.origin) return;
+
+  if (requete.mode === 'navigate') {
+    event.respondWith(fetch(requete).catch(function () {
+      return new Response(PAGE_HORS_LIGNE, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+    }));
+    return;
+  }
+
+  if (url.pathname.indexOf('/static/') === 0) {
+    event.respondWith(
+      fetch(requete).then(function (reponse) {
+        const copie = reponse.clone();
+        caches.open(CACHE).then(function (cache) { cache.put(requete, copie); });
+        return reponse;
+      }).catch(function () { return caches.match(requete); })
+    );
+  }
+});
+"""
+
+
+@app.route("/sw.js")
+def service_worker():
+    reponse = make_response(SERVICE_WORKER_JS)
+    reponse.headers["Content-Type"] = "application/javascript; charset=utf-8"
+    reponse.headers["Cache-Control"] = "no-cache"
+    reponse.headers["Service-Worker-Allowed"] = "/"
+    return reponse
+
 
 @app.route("/carte/<lien_unique>")
 def carte_client(lien_unique):
