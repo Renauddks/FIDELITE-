@@ -13,6 +13,7 @@ cette application doit être hébergée en ligne (ex. Render) — voir README.tx
 """
 
 import json
+import math
 import os
 import re
 import unicodedata
@@ -722,6 +723,24 @@ def accueil():
 # ----------------------------------------------------------------------
 # CARTE CLIENT (accès public via lien individuel)
 # ----------------------------------------------------------------------
+
+# ----------------------------------------------------------------------
+# POINTS GAGNÉS SUR CHAQUE ACHAT
+# ----------------------------------------------------------------------
+# 100 FCFA dépensés = 1 point (arrondi à l'entier inférieur : 250 FCFA = 2 points).
+# Modifiable sans toucher au code via la variable d'environnement FCFA_PAR_POINT_FIDELITE.
+try:
+    FCFA_PAR_POINT = max(1, int(os.environ.get("FCFA_PAR_POINT_FIDELITE", "100")))
+except ValueError:
+    FCFA_PAR_POINT = 100
+
+
+def calculer_points_achat(montant):
+    """Nombre de points correspondant à un montant d'achat en FCFA."""
+    if not math.isfinite(montant) or montant <= 0:
+        return 0
+    return int(montant // FCFA_PAR_POINT)
+
 
 # ----------------------------------------------------------------------
 # INSTALLATION SUR LE TÉLÉPHONE (application web installable / PWA)
@@ -1490,7 +1509,7 @@ def fiche_client(client_id):
         profil=profil, segments_client=segments_client, segments=SEGMENTS_CLIENTS,
         missions_perso=missions_perso, missions_assignables=missions_assignables,
         missions_realisees=missions_realisees, objectifs=OBJECTIFS_COMMERCIAUX,
-        types_recompense=TYPES_RECOMPENSE,
+        types_recompense=TYPES_RECOMPENSE, fcfa_par_point=FCFA_PAR_POINT,
         menu=db.execute("SELECT * FROM menu_echange WHERE actif = 1 ORDER BY nom_produit").fetchall(),
     )
 
@@ -1585,17 +1604,15 @@ def ajouter_achat(client_id):
         abort(404)
 
     montant_brut = request.form.get("montant", "0")
-    points_brut = request.form.get("points_ajoutes", "0")
     note = request.form.get("note", "").strip()
 
     try:
         montant = float(montant_brut)
     except ValueError:
         montant = 0.0
-    try:
-        points_ajoutes = int(points_brut)
-    except ValueError:
-        points_ajoutes = 0
+    if not math.isfinite(montant) or montant < 0:
+        montant = 0.0
+    points_ajoutes = calculer_points_achat(montant)
 
     date_achat_precedent = db.execute(
         "SELECT MAX(date_achat) AS derniere FROM historique_achats WHERE client_id = ?",
@@ -1626,7 +1643,11 @@ def ajouter_achat(client_id):
     verifier_missions_auto_retour(db, client_a_jour, date_achat_precedent)
     db.commit()
 
-    flash("Achat enregistré et carte mise à jour.", "success")
+    flash(
+        f"Achat enregistré : {points_ajoutes} point{'s' if points_ajoutes != 1 else ''} accordé"
+        f"{'s' if points_ajoutes != 1 else ''} automatiquement ({FCFA_PAR_POINT} FCFA = 1 point).",
+        "success",
+    )
     return redirect(url_for("fiche_client", client_id=client_id))
 
 
