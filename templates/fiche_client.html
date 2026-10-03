@@ -36,10 +36,10 @@
     <section class="carte-formulaire">
         <h2>Enregistrer un achat</h2>
         <form method="POST" action="{{ url_for('ajouter_achat', client_id=client.id) }}">
-            <label>Montant (FCFA)</label>
-            <input type="number" step="0.01" name="montant" placeholder="0">
-            <label>Points à ajouter</label>
-            <input type="number" name="points_ajoutes" placeholder="0">
+            <label>Montant de l'achat (FCFA)</label>
+            <input type="number" step="1" min="0" name="montant" placeholder="0" required
+                   oninput="document.getElementById('apercu-points').textContent = Math.max(0, Math.floor((parseFloat(this.value) || 0) / {{ fcfa_par_point }}))">
+            <p class="texte-aide">⭐ Points accordés automatiquement : <strong id="apercu-points">0</strong> ({{ fcfa_par_point }} FCFA = 1 point)</p>
             <label>Note (optionnel)</label>
             <input type="text" name="note" placeholder="Ex : sandwich viennois moyen">
             <button type="submit" class="bouton bouton-principal">+ Ajouter l'achat (case suivante cochée)</button>
