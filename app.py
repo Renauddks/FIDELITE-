@@ -725,6 +725,66 @@ def accueil():
 # ----------------------------------------------------------------------
 
 # ----------------------------------------------------------------------
+# COULEURS DES NIVEAUX : une teinte différente à chaque rang
+# ----------------------------------------------------------------------
+# Bronze → argent → émeraude → saphir → améthyste → rubis → or impérial.
+# Avec plus ou moins de niveaux, la palette est étalée automatiquement.
+# Si vous choisissez une couleur personnalisée dans « Niveaux » (autre que les deux
+# couleurs d'origine, bordeaux et or), elle remplace la couleur automatique du niveau.
+PALETTE_NIVEAUX = ["#CD7F32", "#A9B4C0", "#22B573", "#2F7BFF", "#9B4DDB", "#E0314B", "#F2B705"]
+COULEURS_PAR_DEFAUT = ("#8b0000", "#d4af37")
+
+
+def _hex_vers_rvb(couleur):
+    couleur = couleur.lstrip("#")
+    return tuple(int(couleur[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def _melanger(couleur, cible, part):
+    """Mélange `couleur` avec `cible` (part = 0 à 1 de la cible)."""
+    r1, g1, b1 = _hex_vers_rvb(couleur)
+    r2, g2, b2 = _hex_vers_rvb(cible)
+    return "#%02x%02x%02x" % (
+        round(r1 + (r2 - r1) * part), round(g1 + (g2 - g1) * part), round(b1 + (b2 - b1) * part)
+    )
+
+
+def _luminance(couleur):
+    r, g, b = _hex_vers_rvb(couleur)
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255
+
+
+def style_niveau(niveau, niveaux):
+    """Couleurs d'un niveau selon son rang : variables CSS prêtes à poser dans un style=\"...\"."""
+    ids = [n["id"] for n in niveaux]
+    total = len(ids)
+    rang = ids.index(niveau["id"]) if (niveau is not None and niveau["id"] in ids) else 0
+    indice = round(rang * (len(PALETTE_NIVEAUX) - 1) / (total - 1)) if total > 1 else 0
+    couleur = PALETTE_NIVEAUX[indice]
+    automatique = True
+
+    perso = ((niveau["couleur"] if niveau is not None else "") or "").strip().lower()
+    if re.fullmatch(r"#[0-9a-f]{6}", perso) and perso not in COULEURS_PAR_DEFAUT:
+        couleur, automatique = perso, False
+
+    imperial = automatique and total >= 3 and rang == total - 1
+    texte = "#2b1500" if _luminance(couleur) > 0.55 else "#ffffff"
+    css = (
+        f"--niv:{couleur};"
+        f"--niv-sombre:{_melanger(couleur, '#000000', 0.35)};"
+        f"--niv-clair:{_melanger(couleur, '#ffffff', 0.6)};"
+        f"--niv-pale:{_melanger(couleur, '#ffffff', 0.9)};"
+        f"--niv-fond1:{_melanger(couleur, '#000000', 0.55)};"
+        f"--niv-fond2:{_melanger(couleur, '#000000', 0.8)};"
+        f"--niv-texte:{texte};"
+    )
+    return {"couleur": couleur, "css": css, "imperial": imperial, "rang": rang + 1}
+
+
+app.jinja_env.globals["style_niveau"] = style_niveau
+
+
+# ----------------------------------------------------------------------
 # POINTS GAGNÉS SUR CHAQUE ACHAT
 # ----------------------------------------------------------------------
 # 100 FCFA dépensés = 1 point (arrondi à l'entier inférieur : 250 FCFA = 2 points).
