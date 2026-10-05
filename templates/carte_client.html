@@ -16,6 +16,11 @@
     </div>
 </div>
 
+{% set niv_courant = niveau_effectif or (niveaux[0] if niveaux else none) %}
+{% set sn_courant = style_niveau(niv_courant, niveaux) %}
+{% set sn_suivant = style_niveau(progression.niveau_suivant, niveaux) if progression.niveau_suivant else none %}
+<div class="theme-niveau {% if sn_courant.imperial %}niveau-imperial{% endif %}" style="{{ sn_courant.css }}{% if sn_suivant %}--suiv:{{ sn_suivant.couleur }};{% endif %}">
+
 <!-- Navigation par icônes -->
 <div class="nav-icones">
     <button type="button" class="icone-nav icone-active" data-vue="carte" onclick="changerVue('carte')">
@@ -95,6 +100,12 @@
             <p class="hero-contact">📱 {{ client.numero or 'Non renseigné' }} &nbsp;·&nbsp; 🎂 {{ client.age or '—' }} ans</p>
             {% if client.lieu_livraison %}<p class="hero-contact">📍 {{ client.lieu_livraison }}</p>{% endif %}
             <span class="hero-statut">{{ (niveau_effectif.icone if niveau_effectif else '👑') }} {{ niveau_effectif.nom_niveau if niveau_effectif else client.statut_actuel }}</span>
+            {% if progression.niveau_suivant %}
+            <p class="hero-prochain" style="{{ sn_suivant.css }}">
+                ⬆️ Prochain rang : <strong>{{ progression.niveau_suivant.icone }} {{ progression.niveau_suivant.nom_niveau }}</strong>
+                · encore {{ progression.achats_manquants }} achat{{ 's' if progression.achats_manquants != 1 else '' }}
+            </p>
+            {% endif %}
 
             {% if statut_degrade %}
             <p class="alerte-degradation">
@@ -141,13 +152,13 @@
 
             <div class="bloc-barre-progression">
                 <div class="barre-progression-info">
-                    <span>{{ progression.niveau_actuel.nom_niveau if progression.niveau_actuel else "Citoyen d'Honneur" }}</span>
-                    <span>{{ progression.niveau_suivant.nom_niveau if progression.niveau_suivant else 'Rang suprême' }}</span>
+                    <span class="info-niveau-actuel">{{ progression.niveau_actuel.nom_niveau if progression.niveau_actuel else "Citoyen d'Honneur" }}</span>
+                    <span class="info-niveau-cible">{% if progression.niveau_suivant %}🎯 {{ progression.niveau_suivant.nom_niveau }}{% else %}👑 Rang suprême{% endif %}</span>
                 </div>
                 <div class="barre-progression">
                     <div class="barre-progression-remplissage" style="width: {{ progression.pourcentage }}%;"></div>
                 </div>
-                <p class="barre-progression-message">
+                <p class="barre-progression-message {% if progression.niveau_suivant %}appel-evolution{% endif %}">
                     {% if progression.niveau_suivant %}
                         🎯 <strong>{{ progression.pourcentage }}%</strong> — plus que <strong>{{ progression.achats_manquants }}</strong> achat{{ 's' if progression.achats_manquants != 1 else '' }} pour devenir <strong>{{ progression.niveau_suivant.nom_niveau }}</strong> !
                     {% else %}
@@ -168,7 +179,9 @@
             {% for niveau in niveaux %}
                 {% set atteint = client.nombre_achats >= niveau.nombre_achats_requis %}
                 {% set courant = progression.niveau_actuel and niveau.id == progression.niveau_actuel.id %}
-                <div class="parcours-etape {% if courant %}parcours-courant{% elif atteint %}parcours-atteint{% else %}parcours-verrouille{% endif %}">
+                {% set sn = style_niveau(niveau, niveaux) %}
+                {% set cible = progression.niveau_suivant and niveau.id == progression.niveau_suivant.id %}
+                <div class="parcours-etape {% if courant %}parcours-courant{% elif atteint %}parcours-atteint{% else %}parcours-verrouille{% endif %}{% if cible %} parcours-cible{% endif %}{% if sn.imperial %} etape-imperiale{% endif %}" style="{{ sn.css }}">
                     <div class="parcours-marqueur">
                         <span class="parcours-diamant">{{ loop.index }}</span>
                     </div>
@@ -176,6 +189,7 @@
                             onclick="ouvrirNiveau('{{ niveau.icone }} {{ niveau.nom_niveau|e }}', '{% if atteint %}{{ (niveau.avantages or 'Aucun avantage renseigné pour ce niveau.')|e }}{% else %}🔒 Cet avantage sera dévoilé quand vous atteindrez ce niveau.{% endif %}')">
                         <span class="parcours-corps-icone">{{ niveau.icone }}</span>
                         <span class="parcours-corps-texte">
+                            {% if cible %}<span class="parcours-etiquette">🎯 Prochain objectif</span>{% endif %}
                             <span class="parcours-nom">{{ niveau.nom_niveau }}{% if niveau_min_partage and niveau.nombre_achats_requis >= niveau_min_partage.nombre_achats_requis %} 🎁{% endif %}</span>
                             <span class="parcours-seuil">🎯 {{ niveau.nombre_achats_requis }} achat{{ 's' if niveau.nombre_achats_requis != 1 else '' }}</span>
                             {% if atteint %}<span class="parcours-recompense">{{ niveau.avantages or 'Avantage à venir' }}</span>
@@ -186,7 +200,7 @@
                         {% else %}<span class="parcours-statut-icone parcours-statut-verrou">🔒</span>{% endif %}
                     </button>
                 </div>
-                {% if not loop.last %}<div class="parcours-lien {% if atteint %}parcours-lien-atteint{% endif %}"></div>{% endif %}
+                {% if not loop.last %}<div class="parcours-lien {% if atteint %}parcours-lien-atteint{% endif %}" style="--a:{{ sn.couleur }};--b:{{ style_niveau(niveaux[loop.index], niveaux).couleur }};"></div>{% endif %}
             {% endfor %}
         </div>
     </div>
@@ -198,7 +212,7 @@
         {% if niveaux_debloques %}
             <div class="liste-privileges">
                 {% for niveau in niveaux_debloques %}
-                <div class="privilege-item privilege-debloque">
+                <div class="privilege-item privilege-debloque" style="{{ style_niveau(niveau, niveaux).css }}">
                     <span class="privilege-icone">{{ niveau.icone }}</span>
                     <div>
                         <p class="privilege-nom">{{ niveau.nom_niveau }}</p>
@@ -214,7 +228,7 @@
         <p class="sous-titre-privileges">🔮 Prochaine récompense</p>
         {% if niveau_suivant_privilege %}
             <div class="liste-privileges">
-                <div class="privilege-item privilege-a-venir">
+                <div class="privilege-item privilege-a-venir" style="{{ sn_suivant.css }}">
                     <span class="privilege-icone">{{ niveau_suivant_privilege.icone }}</span>
                     <div>
                         <p class="privilege-nom">{{ niveau_suivant_privilege.nom_niveau }}</p>
@@ -405,6 +419,8 @@
         {% endif %}
     </div>
 </div>
+
+</div><!-- /theme-niveau -->
 
 <!-- Modale : avantages d'un niveau -->
 <div id="modale-niveau" class="modale">
