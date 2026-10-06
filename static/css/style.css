@@ -795,3 +795,193 @@ form input[type="color"] { width: 60px; height: 40px; border: none; padding: 0; 
 .installer-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
 .installer-actions [hidden] { display: none; }
 .bouton-lien { background: none; border: 0; color: var(--gris-texte); text-decoration: underline; cursor: pointer; font-size: 0.9rem; padding: 0.4rem; }
+
+
+/* =====================================================================
+   COULEURS DES NIVEAUX — chaque rang a sa teinte, les cases clignotent
+   ===================================================================== */
+
+/* En-tête de la carte : la couleur du rang actuel */
+.theme-niveau .carte-fidelite-hero {
+    background: linear-gradient(160deg, var(--niv-fond1) 0%, var(--niv-fond2) 70%, #140808 100%);
+}
+.theme-niveau .hero-photo { border-color: var(--niv); box-shadow: 0 0 0 3px var(--niv-fond2), 0 0 18px var(--niv); }
+.theme-niveau .hero-contact { color: var(--niv-clair); }
+
+/* Case du niveau : brille et clignote pour attirer l'œil */
+.theme-niveau .hero-statut {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(135deg, var(--niv-clair), var(--niv) 55%, var(--niv-sombre));
+    color: var(--niv-texte);
+    border: 2px solid var(--niv-clair);
+    font-size: 0.95rem;
+    letter-spacing: 0.3px;
+    padding: 8px 20px;
+    margin-bottom: 10px;
+    animation: clignote-niveau 1.5s ease-in-out infinite;
+}
+.theme-niveau .hero-statut::after {
+    content: "";
+    position: absolute;
+    top: 0; left: -60%;
+    width: 40%; height: 100%;
+    background: linear-gradient(100deg, transparent, rgba(255,255,255,0.65), transparent);
+    transform: skewX(-20deg);
+    animation: brillance-niveau 2.8s ease-in-out infinite;
+}
+@keyframes clignote-niveau {
+    0%, 100% { box-shadow: 0 0 6px 0 var(--niv), 0 2px 8px rgba(0,0,0,0.3); filter: brightness(1); transform: scale(1); }
+    50% { box-shadow: 0 0 22px 7px var(--niv), 0 2px 8px rgba(0,0,0,0.3); filter: brightness(1.28); transform: scale(1.07); }
+}
+@keyframes brillance-niveau {
+    0% { left: -60%; }
+    60%, 100% { left: 130%; }
+}
+.hero-prochain {
+    margin: 0 0 16px;
+    font-size: 0.78rem;
+    color: var(--niv-clair);
+    opacity: 0.95;
+}
+.hero-prochain strong { color: #fff; }
+
+/* Rang impérial : dégradé animé or → rubis */
+.niveau-imperial .hero-statut,
+.etape-imperiale .parcours-diamant {
+    background: linear-gradient(110deg, #FFD54F, #FF9800, #E0314B, #FFD54F);
+    background-size: 300% 100%;
+}
+.niveau-imperial .hero-statut {
+    color: #2b1500;
+    animation: clignote-niveau 1.5s ease-in-out infinite, flux-imperial 3.5s linear infinite;
+}
+@keyframes flux-imperial {
+    0% { background-position: 0% 50%; }
+    100% { background-position: 300% 50%; }
+}
+
+/* Barre de progression : du rang actuel vers le rang visé */
+.theme-niveau .barre-progression-remplissage {
+    position: relative;
+    background: linear-gradient(90deg, var(--niv), var(--suiv, var(--niv)));
+    overflow: hidden;
+}
+.theme-niveau .barre-progression-remplissage::after {
+    content: "";
+    position: absolute;
+    top: 0; left: -40%;
+    width: 40%; height: 100%;
+    background: linear-gradient(100deg, transparent, rgba(255,255,255,0.7), transparent);
+    animation: brillance-niveau 2.2s ease-in-out infinite;
+}
+.theme-niveau .info-niveau-actuel { color: var(--niv-sombre); }
+.theme-niveau .info-niveau-cible {
+    color: var(--suiv, var(--bordeaux));
+    animation: clignote-texte 1.3s ease-in-out infinite;
+}
+@keyframes clignote-texte {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+}
+.appel-evolution {
+    background: var(--niv-pale);
+    border: 2px dashed var(--niv);
+    border-radius: 12px;
+    padding: 8px 10px;
+    font-weight: 600;
+    animation: clignote-cadre 1.8s ease-in-out infinite;
+}
+@keyframes clignote-cadre {
+    0%, 100% { box-shadow: 0 0 0 0 var(--niv); }
+    50% { box-shadow: 0 0 0 5px rgba(255,255,255,0), 0 0 14px 2px var(--niv); }
+}
+
+/* Parcours : chaque étape a sa couleur */
+.theme-niveau .parcours-atteint .parcours-diamant {
+    background: var(--niv);
+    border-color: var(--niv-sombre);
+    color: var(--niv-texte);
+}
+.theme-niveau .parcours-atteint .parcours-corps {
+    border: 1px solid var(--niv);
+    background: linear-gradient(90deg, var(--niv-pale), #fff);
+}
+.theme-niveau .parcours-atteint .parcours-nom { color: var(--niv-sombre); }
+
+.theme-niveau .parcours-courant .parcours-diamant {
+    background: var(--niv);
+    border-color: var(--niv-sombre);
+    color: var(--niv-texte);
+    animation: pulsation-niveau 1.4s ease-in-out infinite;
+}
+.theme-niveau .parcours-courant .parcours-corps {
+    border: 2px solid var(--niv);
+    background: linear-gradient(90deg, var(--niv-pale), #fff);
+    animation: clignote-cadre 1.6s ease-in-out infinite;
+}
+.theme-niveau .parcours-courant .parcours-nom { color: var(--niv-sombre); }
+@keyframes pulsation-niveau {
+    0%, 100% { box-shadow: 0 0 0 0 var(--niv); }
+    50% { box-shadow: 0 0 0 9px rgba(255,255,255,0), 0 0 16px 3px var(--niv); }
+}
+
+/* Prochain objectif : la case qui attire l'œil */
+.theme-niveau .parcours-cible .parcours-diamant {
+    background: #fff;
+    border-color: var(--niv);
+    color: var(--niv);
+    opacity: 1;
+    animation: pulsation-niveau 1.2s ease-in-out infinite;
+}
+.theme-niveau .parcours-cible .parcours-corps {
+    opacity: 1;
+    border: 2px dashed var(--niv);
+    background: var(--niv-pale);
+    animation: clignote-cadre 1.2s ease-in-out infinite;
+}
+.theme-niveau .parcours-cible .parcours-nom { color: var(--niv-sombre); }
+.parcours-etiquette {
+    align-self: flex-start;
+    background: var(--niv);
+    color: var(--niv-texte);
+    font-size: 0.64rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-bottom: 2px;
+    animation: clignote-texte 1.3s ease-in-out infinite;
+}
+
+/* Niveaux encore verrouillés : on devine leur couleur pour donner envie */
+.theme-niveau .parcours-verrouille:not(.parcours-cible) .parcours-diamant {
+    border-color: var(--niv);
+    color: var(--niv);
+    opacity: 0.55;
+}
+.theme-niveau .parcours-verrouille:not(.parcours-cible) .parcours-corps { opacity: 0.75; border-left: 4px solid var(--niv); }
+
+/* Lien entre deux étapes : dégradé d'une couleur à l'autre */
+.theme-niveau .parcours-lien { background: #e2ddd0; }
+.theme-niveau .parcours-lien-atteint { background: linear-gradient(var(--a), var(--b)); }
+
+/* Privilèges */
+.theme-niveau .privilege-debloque {
+    background: linear-gradient(90deg, var(--niv-pale), #fff);
+    border: 1px solid var(--niv);
+    border-left: 5px solid var(--niv);
+}
+.theme-niveau .privilege-a-venir {
+    background: var(--niv-pale);
+    border: 2px dashed var(--niv);
+    animation: clignote-cadre 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .theme-niveau *, .theme-niveau *::after, .parcours-etiquette { animation: none !important; }
+}
+
+/* Numéro lisible sur le losange impérial */
+.theme-niveau .etape-imperiale .parcours-diamant { color: #2b1500; border-color: #FF9800; }
