@@ -1,0 +1,90 @@
+{% extends "_base.html" %}
+{% block titre %}Coffre du Roi{% endblock %}
+{% macro champs_lot(lot=none) %}
+        <label>Nom du lot (affiché au client)</label>
+        <input type="text" name="nom" maxlength="80" value="{{ lot.nom if lot else '' }}" placeholder="Ex : Boisson offerte" required>
+        <label>Icône</label>
+        <input type="text" name="icone" maxlength="4" value="{{ lot.icone if lot else '🎁' }}" class="champ-icone">
+        <label>Type de lot</label>
+        <select name="type_lot">
+            {% for cle, nom in types_lot.items() %}
+            <option value="{{ cle }}" {% if (lot.type_lot if lot else 'points') == cle %}selected{% endif %}>{{ nom }}</option>
+            {% endfor %}
+        </select>
+        <label>Points offerts (obligatoire pour « Points », bonus facultatif pour un produit ou un avantage)</label>
+        <input type="number" name="points" min="0" value="{{ lot.points if lot else 5 }}">
+        <label>Produit du menu (si « Produit du menu »)</label>
+        <select name="produit_id">
+            <option value="">— Choisir un produit —</option>
+            {% for p in menu %}
+            <option value="{{ p.id }}" {% if lot and lot.produit_id == p.id %}selected{% endif %}>{{ p.nom_produit }}</option>
+            {% endfor %}
+        </select>
+        <label>Avantage en nature (si « Autre avantage »)</label>
+        <input type="text" name="recompense_texte" maxlength="200" value="{{ (lot.recompense_texte or '') if lot and lot.type_lot == 'avantage' else '' }}" placeholder="Ex : livraison gratuite">
+        <label>Poids = chance de sortir (plus il est grand, plus le lot sort souvent)</label>
+        <input type="number" name="poids" min="1" value="{{ lot.poids if lot else 10 }}">
+        <label>Maximum de gagnants par jour (vide = illimité)</label>
+        <input type="number" name="stock_jour" min="0" value="{{ lot.stock_jour if lot and lot.stock_jour is not none else '' }}" placeholder="Illimité">
+{% endmacro %}
+{% block contenu %}
+<a href="{{ url_for('admin_dashboard') }}" class="lien-retour">&larr; Retour au tableau de bord</a>
+
+<h1>🎰 Coffre du Roi</h1>
+<p class="texte-aide">
+    Chaque achat enregistré offre <strong>un tirage</strong> au client, valable {{ validite }} jours.
+    Aujourd'hui : <strong>{{ stats.n }}</strong> tirage{{ 's' if stats.n != 1 else '' }}, <strong>{{ stats.pts }}</strong> point{{ 's' if stats.pts != 1 else '' }} distribué{{ 's' if stats.pts != 1 else '' }}.
+</p>
+
+<section class="carte-formulaire">
+    <h2>Ajouter un lot</h2>
+    <form method="POST" action="{{ url_for('ajouter_lot_coffre') }}" class="formulaire-niveau">
+        {{ champs_lot() }}
+        <button type="submit" class="bouton bouton-principal">+ Ajouter au coffre</button>
+    </form>
+</section>
+
+<section class="liste-niveaux">
+    {% for lot in lots %}
+    <form method="POST" action="{{ url_for('modifier_lot_coffre', lot_id=lot.id) }}" class="carte-niveau">
+        <p class="texte-aide">
+            {{ lot.icone }} <strong>{{ lot.nom }}</strong><br>
+            🎲 {% if lot.actif %}≈ {{ ((lot.poids / total_poids) * 100)|round(1) }} % des tirages{% else %}Désactivé{% endif %}
+            · 🏆 Gagné aujourd'hui : {{ gagnes_aujourdhui.get(lot.id, 0) }}{% if lot.stock_jour is not none %} / {{ lot.stock_jour }}{% endif %}
+        </p>
+        {{ champs_lot(lot) }}
+        <label class="case-actif">
+            <input type="checkbox" name="actif" {% if lot.actif %}checked{% endif %}>
+            Lot actif
+        </label>
+        <div class="carte-niveau-actions">
+            <button type="submit" class="bouton bouton-secondaire bouton-mini">Enregistrer</button>
+            <button type="submit" formaction="{{ url_for('supprimer_lot_coffre', lot_id=lot.id) }}" class="bouton bouton-danger bouton-mini" data-confirmation="Supprimer le lot {{ lot.nom }} ?">Supprimer</button>
+        </div>
+    </form>
+    {% else %}
+    <p class="texte-aide">Aucun lot pour l'instant : le coffre est fermé aux clients tant que vous n'en ajoutez pas.</p>
+    {% endfor %}
+</section>
+
+<section class="carte-formulaire">
+    <h2>Derniers tirages</h2>
+    <div class="tableau-scroll">
+        <table class="tableau-clients">
+            <thead><tr><th>Date</th><th>Client</th><th>Résultat</th><th>Bon</th></tr></thead>
+            <tbody>
+                {% for t in derniers %}
+                <tr>
+                    <td>{{ t.date_tirage }}</td>
+                    <td>{{ t.prenom }} {{ t.nom }}</td>
+                    <td>{{ t.lot_nom }}{% if t.points_gagnes %} (+{{ t.points_gagnes }} pts){% endif %}</td>
+                    <td>{{ t.code_bon or '—' }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4">Aucun tirage pour le moment.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

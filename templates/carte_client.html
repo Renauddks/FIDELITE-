@@ -203,6 +203,34 @@
 
 /* Numéro lisible sur le losange impérial */
 .theme-niveau .etape-imperiale .parcours-diamant { color: #2b1500; border-color: #FF9800; }
+
+/* --- Coffre du Roi --- */
+.tirage-royal { background: linear-gradient(160deg, #3a0000, #8B0000 60%, #5a0a0a); color: #fff; border: 2px solid #D4AF37; border-radius: 16px; padding: 1rem; margin-bottom: 1.1rem; text-align: center; position: relative; overflow: hidden; }
+.tirage-titre { margin: 0; font-size: 1.15rem; font-weight: 800; color: #FFD54F; }
+.tirage-sous-titre { margin: 0.2rem 0 0.6rem; font-size: 0.82rem; opacity: 0.9; }
+.tirage-scene { position: relative; height: 96px; display: flex; align-items: center; justify-content: center; }
+.tirage-boite { font-size: 4.2rem; display: inline-block; filter: drop-shadow(0 0 12px rgba(255,213,79,0.7)); animation: tirage-respire 2.2s ease-in-out infinite; }
+.tirage-royal.tirage-secoue .tirage-boite { animation: tirage-secoue 0.18s linear infinite; }
+.tirage-royal.tirage-ouvert .tirage-boite { animation: tirage-explose 0.7s ease-out 1; }
+@keyframes tirage-respire { 0%,100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+@keyframes tirage-secoue { 0% { transform: rotate(-9deg) translateX(-3px); } 50% { transform: rotate(9deg) translateX(3px); } 100% { transform: rotate(-9deg) translateX(-3px); } }
+@keyframes tirage-explose { 0% { transform: scale(0.7); } 60% { transform: scale(1.5); } 100% { transform: scale(1.15); } }
+.tirage-compteur { margin: 0.2rem 0 0.7rem; font-size: 0.95rem; }
+.tirage-bouton { width: 100%; font-size: 1.05rem; font-weight: 800; background: linear-gradient(180deg, #FFE082, #D4AF37); color: #3a0000; border: 2px solid #FFF3C4; box-shadow: 0 0 14px rgba(255,213,79,0.55); }
+.tirage-bouton:not([disabled]) { animation: tirage-respire 1.8s ease-in-out infinite; }
+.tirage-bouton[disabled] { opacity: 0.55; cursor: not-allowed; }
+.tirage-resultat { margin-top: 0.8rem; background: #fff; color: #3a0000; border-radius: 12px; padding: 0.9rem; position: relative; animation: tirage-apparait 0.4s ease-out; }
+.tirage-resultat[hidden] { display: none; }
+.tirage-resultat-icone { font-size: 2.6rem; display: block; }
+.tirage-resultat-titre { display: block; font-size: 1.15rem; margin: 0.2rem 0; }
+.tirage-resultat-message { margin: 0 0 0.7rem; font-size: 0.9rem; }
+@keyframes tirage-apparait { from { opacity: 0; transform: translateY(14px) scale(0.95); } to { opacity: 1; transform: none; } }
+.tirage-lots-titre { margin: 0.9rem 0 0.3rem; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.85; }
+.tirage-lots { display: flex; flex-wrap: wrap; gap: 0.35rem; justify-content: center; }
+.tirage-lot { background: rgba(255,255,255,0.14); border: 1px solid rgba(255,213,79,0.5); border-radius: 14px; padding: 2px 9px; font-size: 0.78rem; }
+.tirage-confetti { position: absolute; top: 40%; left: 50%; font-size: 1.2rem; pointer-events: none; animation: tirage-confetti 1.3s ease-out forwards; }
+@keyframes tirage-confetti { from { opacity: 1; transform: translate(0,0) scale(0.6); } to { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(1.3) rotate(260deg); } }
+@media (prefers-reduced-motion: reduce) { .tirage-royal * { animation: none !important; } }
 </style>
 
 <!-- Installation de l'application sur le téléphone -->
@@ -450,8 +478,31 @@
     <div class="carte-missions">
         <p class="titre-section">🎯 Missions bonus</p>
         {% if client.nombre_achats < 1 %}
-        <p class="texte-verrouille">🔒 Les missions se débloquent après votre premier achat. Passez nous voir pour commencer l'aventure !</p>
+        <p class="texte-verrouille">🔒 Les missions se débloquent après votre premier achat. Passez nous voir : chaque achat vous offrira aussi un tirage au Coffre du Roi !</p>
         {% else %}
+        <!-- Coffre du Roi : un tirage offert à chaque achat -->
+        <div class="tirage-royal" id="tirage-royal" data-url="{{ url_for('ouvrir_coffre_tirage', lien_unique=client.lien_unique) }}">
+            <p class="tirage-titre">🎰 Le Coffre du Roi</p>
+            <p class="tirage-sous-titre">Chaque achat vous offre un tirage, valable {{ tirage_validite }} jours.</p>
+            <div class="tirage-scene"><span class="tirage-boite" id="tirage-boite">🧰</span></div>
+            <p class="tirage-compteur">🎟️ Tirages disponibles : <strong id="tirage-compteur">{{ tirages_dispo }}</strong></p>
+            <button type="button" id="tirage-bouton" class="bouton bouton-principal tirage-bouton" {% if tirages_dispo < 1 %}disabled{% endif %}>
+                {% if tirages_dispo < 1 %}🔒 Faites un achat pour jouer{% else %}🔓 Ouvrir mon coffre{% endif %}
+            </button>
+            <div class="tirage-resultat" id="tirage-resultat" hidden>
+                <span class="tirage-resultat-icone" id="tirage-resultat-icone"></span>
+                <strong class="tirage-resultat-titre" id="tirage-resultat-titre"></strong>
+                <p class="tirage-resultat-message" id="tirage-resultat-message"></p>
+                <button type="button" id="tirage-fermer" class="bouton bouton-secondaire">OK</button>
+            </div>
+            {% if lots_visibles %}
+            <p class="tirage-lots-titre">À gagner</p>
+            <div class="tirage-lots">
+                {% for lot in lots_visibles %}<span class="tirage-lot">{{ lot.icone }} {{ lot.nom }}</span>{% endfor %}
+            </div>
+            {% endif %}
+        </div>
+
         <p class="texte-aide">Réalisez ces petits défis entre deux achats pour gagner des points supplémentaires !</p>
 
         <div class="bloc-progression-jour">
@@ -736,6 +787,75 @@ function ouvrirNiveau(titre, avantages) {
             }
         }, 3500);
     }
+})();
+
+(function () {
+    var coffre = document.getElementById('tirage-royal');
+    if (coffre) {
+        var bouton = document.getElementById('tirage-bouton');
+        var boite = document.getElementById('tirage-boite');
+        var compteur = document.getElementById('tirage-compteur');
+        var resultat = document.getElementById('tirage-resultat');
+        var enCours = false;
+
+        function confettis() {
+            var symboles = ['🎊', '✨', '⭐', '🎉', '👑'];
+            for (var i = 0; i < 16; i++) {
+                var el = document.createElement('span');
+                el.className = 'tirage-confetti';
+                el.textContent = symboles[i % symboles.length];
+                var angle = (Math.PI * 2 * i) / 16;
+                el.style.setProperty('--dx', Math.round(Math.cos(angle) * (90 + Math.random() * 60)) + 'px');
+                el.style.setProperty('--dy', Math.round(Math.sin(angle) * (70 + Math.random() * 50)) + 'px');
+                coffre.appendChild(el);
+                setTimeout(function (e) { e.remove(); }, 1400, el);
+            }
+        }
+
+        function afficher(donnees, estErreur) {
+            coffre.classList.remove('tirage-secoue');
+            coffre.classList.add('tirage-ouvert');
+            document.getElementById('tirage-resultat-icone').textContent = estErreur ? '🔒' : donnees.icone;
+            document.getElementById('tirage-resultat-titre').textContent = estErreur ? 'Oups' : donnees.titre;
+            document.getElementById('tirage-resultat-message').textContent = donnees.message;
+            boite.textContent = (!estErreur && donnees.resultat !== 'perdu') ? '🎉' : '💨';
+            resultat.hidden = false;
+            if (!estErreur && donnees.resultat !== 'perdu') confettis();
+            if (typeof donnees.restants === 'number') {
+                compteur.textContent = donnees.restants;
+            }
+        }
+
+        bouton.addEventListener('click', function () {
+            if (enCours || bouton.disabled) return;
+            enCours = true;
+            bouton.disabled = true;
+            resultat.hidden = true;
+            coffre.classList.remove('tirage-ouvert');
+            coffre.classList.add('tirage-secoue');
+            boite.textContent = '🧰';
+            var debut = Date.now();
+            fetch(coffre.getAttribute('data-url'), { method: 'POST', headers: { 'X-Requested-With': 'fetch' } })
+                .then(function (reponse) { return reponse.json().catch(function () { return { ok: false, message: 'Réponse inattendue du serveur.' }; }); })
+                .catch(function () { return { ok: false, message: 'Pas de connexion : réessayez dans un instant.' }; })
+                .then(function (donnees) {
+                    var attente = Math.max(0, 1300 - (Date.now() - debut));
+                    setTimeout(function () {
+                        afficher(donnees, !donnees.ok);
+                        enCours = false;
+                        var reste = parseInt(compteur.textContent, 10) || 0;
+                        bouton.disabled = reste < 1;
+                        bouton.textContent = reste < 1 ? '🔒 Faites un achat pour jouer' : '🔓 Ouvrir encore';
+                    }, attente);
+                });
+        });
+
+        document.getElementById('tirage-fermer').addEventListener('click', function () {
+            window.location.hash = 'missions';
+            window.location.reload();
+        });
+    }
+    if (window.location.hash === '#missions' && typeof changerVue === 'function') { changerVue('missions'); }
 })();
 
 function changerVue(vue) {
