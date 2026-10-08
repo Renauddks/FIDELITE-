@@ -152,6 +152,39 @@ def creer_tables(conn):
         )
     """)
 
+    # --- Coffre du Roi : un tirage offert à chaque achat ---
+    # Les achats déjà enregistrés sont marqués « tirage utilisé » (valeur par défaut 1 à la création
+    # de la colonne), puis les nouveaux achats reçoivent 0 = un tirage disponible.
+    conn.execute("ALTER TABLE historique_achats ADD COLUMN IF NOT EXISTS tirage_utilise INTEGER NOT NULL DEFAULT 1")
+    conn.execute("ALTER TABLE historique_achats ALTER COLUMN tirage_utilise SET DEFAULT 0")
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS tirage_lots (
+            id SERIAL PRIMARY KEY,
+            nom TEXT NOT NULL,
+            icone TEXT NOT NULL DEFAULT '🎁',
+            type_lot TEXT NOT NULL DEFAULT 'points',
+            points INTEGER NOT NULL DEFAULT 0,
+            produit_id INTEGER,
+            recompense_texte TEXT,
+            poids INTEGER NOT NULL DEFAULT 1,
+            stock_jour INTEGER,
+            actif INTEGER NOT NULL DEFAULT 1
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS tirages (
+            id SERIAL PRIMARY KEY,
+            client_id INTEGER NOT NULL REFERENCES clients_fidelite (id) ON DELETE CASCADE,
+            lot_id INTEGER,
+            lot_nom TEXT NOT NULL,
+            type_lot TEXT NOT NULL,
+            points_gagnes INTEGER NOT NULL DEFAULT 0,
+            code_bon TEXT,
+            date_tirage TEXT NOT NULL
+        )
+    """)
+
     # Photos des clients et captures de preuve : stockées dans la base
     # (le disque de Render gratuit est effacé à chaque redémarrage).
     conn.execute("""
@@ -228,12 +261,34 @@ def seed_missions(conn):
     conn.commit()
 
 
+def seed_tirage_lots(conn):
+    """Lots de départ du Coffre du Roi (modifiables dans Admin → Coffre du Roi)."""
+    if conn.execute("SELECT COUNT(*) FROM tirage_lots").fetchone()[0] > 0:
+        return
+    lots = [
+        # nom, icône, type, points, texte, poids, stock par jour
+        ("Coffre vide… retentez votre chance", "💨", "perdu", 0, None, 40, None),
+        ("+5 points", "⭐", "points", 5, None, 30, None),
+        ("+10 points", "🌟", "points", 10, None, 15, None),
+        ("+25 points", "💫", "points", 25, None, 6, None),
+        ("Boisson offerte", "🥤", "avantage", 0, "Boisson offerte", 6, 3),
+        ("Sandwich offert", "🥪", "avantage", 0, "Sandwich offert", 1, 1),
+    ]
+    conn.executemany(
+        """INSERT INTO tirage_lots (nom, icone, type_lot, points, recompense_texte, poids, stock_jour)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        lots,
+    )
+    conn.commit()
+
+
 def main():
     conn = db_compat.connecter()
     creer_tables(conn)
     seed_niveaux(conn)
     seed_menu_echange(conn)
     seed_missions(conn)
+    seed_tirage_lots(conn)
     conn.close()
     print("Base de données FIDÉLITÉ+ prête (PostgreSQL).")
 

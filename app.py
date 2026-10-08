@@ -18,12 +18,12 @@ import os
 import re
 import unicodedata
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import wraps
 
 from flask import (
     Flask, g, render_template, request, redirect,
-    url_for, session, flash, abort, make_response
+    url_for, session, flash, abort, make_response, jsonify
 )
 from werkzeug.utils import secure_filename
 
@@ -82,6 +82,7 @@ def init_db_if_needed():
     init_db.seed_niveaux(conn)
     init_db.seed_menu_echange(conn)
     init_db.seed_missions(conn)
+    init_db.seed_tirage_lots(conn)
     conn.close()
 
 
@@ -316,7 +317,7 @@ def lire_recompense_formulaire(db):
     return type_recompense, points, produit_id, texte
 
 
-def accorder_recompense(db, mission, client_id):
+def accorder_recompense(db, mission, client_id, origine=None):
     """Crédite les points et/ou génère un bon pour le produit ou l'avantage en nature.
 
     Renvoie le code du bon généré (ou None s'il n'y a que des points).
@@ -342,7 +343,7 @@ def accorder_recompense(db, mission, client_id):
     db.execute(
         """INSERT INTO echanges_points (client_id, client_actuel_id, points_echanges, nombre_bons, produit_nom, code_unique)
            VALUES (?, ?, 0, 0, ?, ?)""",
-        (client_id, client_id, f"🎯 {nom} (mission {mission['titre']})", code),
+        (client_id, client_id, f"🎯 {nom} ({origine or 'mission ' + mission['titre']})", code),
     )
     return code
 
@@ -803,6 +804,256 @@ def calculer_points_achat(montant):
 
 
 # ----------------------------------------------------------------------
+# COFFRE DU ROI : un tirage offert à chaque achat
+# ----------------------------------------------------------------------
+try:
+    TIRAGE_VALIDITE_JOURS = max(1, int(os.environ.get("TIRAGE_VALIDITE_JOURS_FIDELITE", "7")))
+except ValueError:
+    TIRAGE_VALIDITE_JOURS = 7
+
+TYPES_LOT = {
+    "perdu": "💨 Coffre vide (rien à gagner)",
+    "points": "⭐ Points de fidélité",
+    "produit": "🍔 Produit du menu",
+    "avantage": "🎁 Autre avantage en nature",
+}
+FORMAT_DATE = "%Y-%m-%d %H:%M:%S"
+
+
+def limite_validite_tirage():
+    return (datetime.now() - timedelta(days=TIRAGE_VALIDITE_JOURS)).strftime(FORMAT_DATE)
+
+
+def tirages_disponibles(db, client_id):
+    """Nombre de tirages que le client peut encore utiliser (1 par achat, valables quelques jours)."""
+    ligne = db.execute(
+        """SELECT COUNT(*) AS n FROM historique_achats
+           WHERE client_id = ? AND tirage_utilise = 0 AND montant > 0 AND date_achat >= ?""",
+        (client_id, limite_validite_tirage()),
+    ).fetchone()
+    return ligne["n"]
+
+
+def consommer_tirage(db, client_id):
+    """Utilise un tirage (le plus ancien). Renvoie True si un tirage était disponible (opération atomique)."""
+    ligne = db.execute(
+        """UPDATE historique_achats SET tirage_utilise = 1
+           WHERE id = (SELECT id FROM historique_achats
+                       WHERE client_id = ? AND tirage_utilise = 0 AND montant > 0 AND date_achat >= ?
+                       ORDER BY id LIMIT 1)
+             AND tirage_utilise = 0
+           RETURNING id""",
+        (client_id, limite_validite_tirage()),
+    ).fetchone()
+    return ligne is not None
+
+
+def lots_tirables(db):
+    """Lots actifs dont le stock du jour n'est pas épuisé."""
+    aujourdhui = datetime.now().strftime("%Y-%m-%d")
+    lots = []
+    for lot in db.execute("SELECT * FROM tirage_lots WHERE actif = 1 ORDER BY id").fetchall():
+        if lot["stock_jour"] is not None:
+            gagnes = db.execute(
+                "SELECT COUNT(*) AS n FROM tirages WHERE lot_id = ? AND substr(date_tirage, 1, 10) = ?",
+                (lot["id"], aujourdhui),
+            ).fetchone()["n"]
+            if gagnes >= lot["stock_jour"]:
+                continue
+        if lot["poids"] and lot["poids"] > 0:
+            lots.append(lot)
+    return lots
+
+
+def tirer_au_sort(lots):
+    """Tirage pondéré : plus le poids d'un lot est grand, plus il sort souvent."""
+    total = sum(lot["poids"] for lot in lots)
+    seuil = secrets.SystemRandom().uniform(0, total)
+    cumul = 0
+    for lot in lots:
+        cumul += lot["poids"]
+        if seuil <= cumul:
+            return lot
+    return lots[-1]
+
+
+@app.route("/carte/<lien_unique>/coffre/ouvrir", methods=["POST"])
+def ouvrir_coffre_tirage(lien_unique):
+    db = get_db()
+    client = db.execute(
+        "SELECT * FROM clients_fidelite WHERE lien_unique = ?", (lien_unique,)
+    ).fetchone()
+    if client is None:
+        abort(404)
+
+    lots = lots_tirables(db)
+    if not lots:
+        return jsonify(ok=False, message="Le coffre est en préparation, revenez bientôt !"), 503
+    if not consommer_tirage(db, client["id"]):
+        db.rollback()
+        return jsonify(ok=False, message="Aucun tirage disponible : chaque achat vous offre un tour de coffre."), 409
+
+    lot = tirer_au_sort(lots)
+    type_lot = lot["type_lot"]
+    points_gagnes, code_bon = 0, None
+
+    if type_lot != "perdu":
+        pseudo_mission = {
+            "points_recompense": lot["points"] if type_lot in ("points", "produit", "avantage") else 0,
+            "type_recompense": type_lot if type_lot in ("produit", "avantage") else "points",
+            "produit_id": lot["produit_id"],
+            "recompense_texte": lot["recompense_texte"] or lot["nom"],
+            "titre": "Coffre du Roi",
+        }
+        points_gagnes = pseudo_mission["points_recompense"] or 0
+        code_bon = accorder_recompense(db, pseudo_mission, client["id"], origine="Coffre du Roi")
+        if code_bon:
+            notifier(db, client["id"], f"🎰 Coffre du Roi : vous avez gagné {lot['nom']} ! Votre bon {code_bon} est dans l'onglet 🍔 Échanger.")
+
+    db.execute(
+        """INSERT INTO tirages (client_id, lot_id, lot_nom, type_lot, points_gagnes, code_bon, date_tirage)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (client["id"], lot["id"], lot["nom"], type_lot, points_gagnes, code_bon,
+         datetime.now().strftime(FORMAT_DATE)),
+    )
+    db.commit()
+
+    solde = db.execute(
+        "SELECT score_points FROM clients_fidelite WHERE id = ?", (client["id"],)
+    ).fetchone()["score_points"]
+    if type_lot == "perdu":
+        message = "Le coffre est vide cette fois… Revenez à votre prochain achat pour retenter votre chance !"
+    elif code_bon:
+        message = f"Vous gagnez : {lot['nom']} ! Votre bon n°{code_bon} vous attend dans l'onglet 🍔 Échanger."
+        if points_gagnes:
+            message += f" (+{points_gagnes} points)"
+    else:
+        message = f"Vous gagnez +{points_gagnes} points !"
+    return jsonify(
+        ok=True, resultat=type_lot, icone=lot["icone"], titre=lot["nom"], message=message,
+        points=points_gagnes, code=code_bon, solde=solde,
+        restants=tirages_disponibles(db, client["id"]),
+    )
+
+
+def lire_lot_formulaire(db):
+    """Lit le formulaire d'un lot du coffre : dict prêt à enregistrer, ou None si invalide."""
+    nom = request.form.get("nom", "").strip()[:80]
+    if not nom:
+        flash("Donnez un nom au lot.", "danger")
+        return None
+    type_lot = request.form.get("type_lot", "points")
+    if type_lot not in TYPES_LOT:
+        type_lot = "points"
+    try:
+        points = max(0, int(request.form.get("points", "0") or 0))
+        poids = max(1, int(request.form.get("poids", "1") or 1))
+    except ValueError:
+        flash("Points et poids doivent être des nombres entiers.", "danger")
+        return None
+    stock_brut = request.form.get("stock_jour", "").strip()
+    stock_jour = int(stock_brut) if stock_brut.isdigit() else None
+
+    produit_id, texte = None, None
+    if type_lot == "points":
+        points = max(1, points)
+    elif type_lot == "perdu":
+        points = 0
+    elif type_lot == "produit":
+        brut = request.form.get("produit_id", "")
+        produit = db.execute("SELECT * FROM menu_echange WHERE id = ?", (int(brut),)).fetchone() if brut.isdigit() else None
+        if produit is None:
+            flash("Choisissez un produit du menu pour ce lot.", "danger")
+            return None
+        produit_id, texte = produit["id"], produit["nom_produit"]
+    else:
+        texte = request.form.get("recompense_texte", "").strip()[:200]
+        if not texte:
+            flash("Décrivez l'avantage offert (ex : boisson offerte).", "danger")
+            return None
+    return {
+        "nom": nom, "icone": request.form.get("icone", "🎁").strip()[:4] or "🎁",
+        "type_lot": type_lot, "points": points, "produit_id": produit_id,
+        "recompense_texte": texte, "poids": poids, "stock_jour": stock_jour,
+    }
+
+
+@app.route("/admin/coffre")
+@admin_requis
+def gestion_coffre():
+    db = get_db()
+    lots = db.execute("SELECT * FROM tirage_lots ORDER BY id").fetchall()
+    total_poids = sum(l["poids"] for l in lots if l["actif"]) or 1
+    aujourdhui = datetime.now().strftime("%Y-%m-%d")
+    gagnes_aujourdhui = {
+        l["lot_id"]: l["n"] for l in db.execute(
+            "SELECT lot_id, COUNT(*) AS n FROM tirages WHERE substr(date_tirage, 1, 10) = ? GROUP BY lot_id",
+            (aujourdhui,),
+        ).fetchall()
+    }
+    derniers = db.execute(
+        """SELECT tirages.*, clients_fidelite.prenom, clients_fidelite.nom
+           FROM tirages JOIN clients_fidelite ON clients_fidelite.id = tirages.client_id
+           ORDER BY tirages.id DESC LIMIT 25"""
+    ).fetchall()
+    stats = db.execute(
+        "SELECT COUNT(*) AS n, COALESCE(SUM(points_gagnes), 0) AS pts FROM tirages WHERE substr(date_tirage, 1, 10) = ?",
+        (aujourdhui,),
+    ).fetchone()
+    return render_template(
+        "gestion_coffre.html", lots=lots, total_poids=total_poids, gagnes_aujourdhui=gagnes_aujourdhui,
+        derniers=derniers, stats=stats, types_lot=TYPES_LOT, validite=TIRAGE_VALIDITE_JOURS,
+        menu=db.execute("SELECT * FROM menu_echange WHERE actif = 1 ORDER BY nom_produit").fetchall(),
+    )
+
+
+@app.route("/admin/coffre/ajouter", methods=["POST"])
+@admin_requis
+def ajouter_lot_coffre():
+    db = get_db()
+    lot = lire_lot_formulaire(db)
+    if lot is not None:
+        db.execute(
+            """INSERT INTO tirage_lots (nom, icone, type_lot, points, produit_id, recompense_texte, poids, stock_jour, actif)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)""",
+            (lot["nom"], lot["icone"], lot["type_lot"], lot["points"], lot["produit_id"],
+             lot["recompense_texte"], lot["poids"], lot["stock_jour"]),
+        )
+        db.commit()
+        flash("Lot ajouté au coffre.", "success")
+    return redirect(url_for("gestion_coffre"))
+
+
+@app.route("/admin/coffre/<int:lot_id>/modifier", methods=["POST"])
+@admin_requis
+def modifier_lot_coffre(lot_id):
+    db = get_db()
+    lot = lire_lot_formulaire(db)
+    if lot is not None:
+        db.execute(
+            """UPDATE tirage_lots SET nom = ?, icone = ?, type_lot = ?, points = ?, produit_id = ?,
+                      recompense_texte = ?, poids = ?, stock_jour = ?, actif = ?
+               WHERE id = ?""",
+            (lot["nom"], lot["icone"], lot["type_lot"], lot["points"], lot["produit_id"],
+             lot["recompense_texte"], lot["poids"], lot["stock_jour"],
+             1 if request.form.get("actif") else 0, lot_id),
+        )
+        db.commit()
+        flash("Lot mis à jour.", "success")
+    return redirect(url_for("gestion_coffre"))
+
+
+@app.route("/admin/coffre/<int:lot_id>/supprimer", methods=["POST"])
+@admin_requis
+def supprimer_lot_coffre(lot_id):
+    db = get_db()
+    db.execute("DELETE FROM tirage_lots WHERE id = ?", (lot_id,))
+    db.commit()
+    flash("Lot supprimé du coffre.", "warning")
+    return redirect(url_for("gestion_coffre"))
+
+
+# ----------------------------------------------------------------------
 # INSTALLATION SUR LE TÉLÉPHONE (application web installable / PWA)
 # ----------------------------------------------------------------------
 
@@ -1015,8 +1266,16 @@ def carte_client(lien_unique):
     niveaux_debloques = [n for n in niveaux if client["nombre_achats"] >= n["nombre_achats_requis"]]
     niveau_suivant_privilege = progression["niveau_suivant"]
 
+    tirages_dispo = tirages_disponibles(db, client["id"])
+    lots_visibles = db.execute(
+        "SELECT nom, icone FROM tirage_lots WHERE actif = 1 AND type_lot <> 'perdu' ORDER BY poids DESC, id"
+    ).fetchall()
+
     return render_template(
         "carte_client.html",
+        tirages_dispo=tirages_dispo,
+        lots_visibles=lots_visibles,
+        tirage_validite=TIRAGE_VALIDITE_JOURS,
         client=client,
         niveaux=niveaux,
         progression=progression,
@@ -1680,8 +1939,8 @@ def ajouter_achat(client_id):
     ).fetchone()["derniere"]
 
     db.execute(
-        """INSERT INTO historique_achats (client_id, montant, points_ajoutes, note)
-           VALUES (?, ?, ?, ?)""",
+        """INSERT INTO historique_achats (client_id, montant, points_ajoutes, note, tirage_utilise)
+           VALUES (?, ?, ?, ?, 0)""",
         (client_id, montant, points_ajoutes, note),
     )
 
