@@ -263,11 +263,17 @@ def seed_missions(conn):
 
 def seed_tirage_lots(conn):
     """Lots de départ du Coffre du Roi (modifiables dans Admin → Coffre du Roi)."""
+    # La roue remplace le coffre : on renomme le lot « vide » d'origine (seulement s'il n'a pas été modifié).
+    conn.execute(
+        "UPDATE tirage_lots SET nom = ? WHERE nom = ?",
+        ("Case vide… retentez votre chance", "Coffre vide… retentez votre chance"),
+    )
+    conn.commit()
     if conn.execute("SELECT COUNT(*) FROM tirage_lots").fetchone()[0] > 0:
         return
     lots = [
         # nom, icône, type, points, texte, poids, stock par jour
-        ("Coffre vide… retentez votre chance", "💨", "perdu", 0, None, 40, None),
+        ("Case vide… retentez votre chance", "💨", "perdu", 0, None, 40, None),
         ("+5 points", "⭐", "points", 5, None, 30, None),
         ("+10 points", "🌟", "points", 10, None, 15, None),
         ("+25 points", "💫", "points", 25, None, 6, None),

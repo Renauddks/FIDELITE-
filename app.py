@@ -888,10 +888,10 @@ def ouvrir_coffre_tirage(lien_unique):
 
     lots = lots_tirables(db)
     if not lots:
-        return jsonify(ok=False, message="Le coffre est en préparation, revenez bientôt !"), 503
+        return jsonify(ok=False, message="La roue est en préparation, revenez bientôt !"), 503
     if not consommer_tirage(db, client["id"]):
         db.rollback()
-        return jsonify(ok=False, message="Aucun tirage disponible : chaque achat vous offre un tour de coffre."), 409
+        return jsonify(ok=False, message="Aucun tirage disponible : chaque achat vous offre un tour de roue."), 409
 
     lot = tirer_au_sort(lots)
     type_lot = lot["type_lot"]
@@ -903,12 +903,12 @@ def ouvrir_coffre_tirage(lien_unique):
             "type_recompense": type_lot if type_lot in ("produit", "avantage") else "points",
             "produit_id": lot["produit_id"],
             "recompense_texte": lot["recompense_texte"] or lot["nom"],
-            "titre": "Coffre du Roi",
+            "titre": "Roue du Roi",
         }
         points_gagnes = pseudo_mission["points_recompense"] or 0
-        code_bon = accorder_recompense(db, pseudo_mission, client["id"], origine="Coffre du Roi")
+        code_bon = accorder_recompense(db, pseudo_mission, client["id"], origine="Roue du Roi")
         if code_bon:
-            notifier(db, client["id"], f"🎰 Coffre du Roi : vous avez gagné {lot['nom']} ! Votre bon {code_bon} est dans l'onglet 🍔 Échanger.")
+            notifier(db, client["id"], f"🎡 Roue du Roi : vous avez gagné {lot['nom']} ! Votre bon {code_bon} est dans l'onglet 🍔 Échanger.")
 
     db.execute(
         """INSERT INTO tirages (client_id, lot_id, lot_nom, type_lot, points_gagnes, code_bon, date_tirage)
@@ -922,7 +922,7 @@ def ouvrir_coffre_tirage(lien_unique):
         "SELECT score_points FROM clients_fidelite WHERE id = ?", (client["id"],)
     ).fetchone()["score_points"]
     if type_lot == "perdu":
-        message = "Le coffre est vide cette fois… Revenez à votre prochain achat pour retenter votre chance !"
+        message = "La roue s'arrête sur une case vide cette fois… Revenez à votre prochain achat pour retenter votre chance !"
     elif code_bon:
         message = f"Vous gagnez : {lot['nom']} ! Votre bon n°{code_bon} vous attend dans l'onglet 🍔 Échanger."
         if points_gagnes:
@@ -930,7 +930,7 @@ def ouvrir_coffre_tirage(lien_unique):
     else:
         message = f"Vous gagnez +{points_gagnes} points !"
     return jsonify(
-        ok=True, resultat=type_lot, icone=lot["icone"], titre=lot["nom"], message=message,
+        ok=True, lot_id=lot["id"], resultat=type_lot, icone=lot["icone"], titre=lot["nom"], message=message,
         points=points_gagnes, code=code_bon, solde=solde,
         restants=tirages_disponibles(db, client["id"]),
     )
@@ -1270,11 +1270,16 @@ def carte_client(lien_unique):
     lots_visibles = db.execute(
         "SELECT nom, icone FROM tirage_lots WHERE actif = 1 AND type_lot <> 'perdu' ORDER BY poids DESC, id"
     ).fetchall()
+    lots_roue = [
+        {"id": l["id"], "nom": l["nom"], "icone": l["icone"], "type": l["type_lot"]}
+        for l in db.execute("SELECT id, nom, icone, type_lot FROM tirage_lots WHERE actif = 1 ORDER BY id").fetchall()
+    ]
 
     return render_template(
         "carte_client.html",
         tirages_dispo=tirages_dispo,
         lots_visibles=lots_visibles,
+        lots_roue=lots_roue,
         tirage_validite=TIRAGE_VALIDITE_JOURS,
         client=client,
         niveaux=niveaux,
