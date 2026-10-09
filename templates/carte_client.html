@@ -230,6 +230,16 @@
 .tirage-lot { background: rgba(255,255,255,0.14); border: 1px solid rgba(255,213,79,0.5); border-radius: 14px; padding: 2px 9px; font-size: 0.78rem; }
 .tirage-confetti { position: absolute; top: 40%; left: 50%; font-size: 1.2rem; pointer-events: none; animation: tirage-confetti 1.3s ease-out forwards; }
 @keyframes tirage-confetti { from { opacity: 1; transform: translate(0,0) scale(0.6); } to { opacity: 0; transform: translate(var(--dx), var(--dy)) scale(1.3) rotate(260deg); } }
+
+/* --- Roue du Roi --- */
+.roue-zone { position: relative; width: 270px; max-width: 86%; margin: 0.4rem auto 0.6rem; }
+.roue-zone::before { content: ""; position: absolute; inset: -6px; border-radius: 50%; background: radial-gradient(circle, rgba(255,213,79,0.35), transparent 70%); animation: tirage-respire 2.4s ease-in-out infinite; }
+.roue-svg { position: relative; display: block; width: 100%; height: auto; filter: drop-shadow(0 4px 10px rgba(0,0,0,0.5)); will-change: transform; }
+.roue-fleche { position: absolute; top: -10px; left: 50%; width: 0; height: 0; margin-left: -13px; border-left: 13px solid transparent; border-right: 13px solid transparent; border-top: 26px solid #FFD54F; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.6)); z-index: 3; }
+.roue-fleche.roue-rebond { animation: roue-rebond 0.5s ease-out 2; }
+@keyframes roue-rebond { 0%,100% { transform: rotate(0); } 40% { transform: rotate(-14deg); } 70% { transform: rotate(6deg); } }
+.roue-moyeu { position: absolute; top: 50%; left: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #FFF3C4, #D4AF37 60%, #8a6d0b); border: 3px solid #5a0a0a; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; z-index: 2; box-shadow: 0 2px 6px rgba(0,0,0,0.5); }
+.tirage-royal.roue-attente .roue-moyeu { animation: tirage-respire 0.5s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .tirage-royal * { animation: none !important; } }
 </style>
 
@@ -482,12 +492,20 @@
         {% else %}
         <!-- Coffre du Roi : un tirage offert à chaque achat -->
         <div class="tirage-royal" id="tirage-royal" data-url="{{ url_for('ouvrir_coffre_tirage', lien_unique=client.lien_unique) }}">
-            <p class="tirage-titre">🎰 Le Coffre du Roi</p>
+            <p class="tirage-titre">🎡 La Roue du Roi</p>
             <p class="tirage-sous-titre">Chaque achat vous offre un tirage, valable {{ tirage_validite }} jours.</p>
-            <div class="tirage-scene"><span class="tirage-boite" id="tirage-boite">🧰</span></div>
+            {% if lots_roue %}
+            <div class="roue-zone" id="roue-zone" data-lots='{{ lots_roue|tojson }}'>
+                <span class="roue-fleche" id="roue-fleche"></span>
+                <svg class="roue-svg" id="roue-svg" viewBox="-104 -104 208 208" role="img" aria-label="Roue des lots"></svg>
+                <span class="roue-moyeu">👑</span>
+            </div>
+            {% else %}
+            <p class="tirage-sous-titre">La roue est en préparation, revenez bientôt !</p>
+            {% endif %}
             <p class="tirage-compteur">🎟️ Tirages disponibles : <strong id="tirage-compteur">{{ tirages_dispo }}</strong></p>
-            <button type="button" id="tirage-bouton" class="bouton bouton-principal tirage-bouton" {% if tirages_dispo < 1 %}disabled{% endif %}>
-                {% if tirages_dispo < 1 %}🔒 Faites un achat pour jouer{% else %}🔓 Ouvrir mon coffre{% endif %}
+            <button type="button" id="tirage-bouton" class="bouton bouton-principal tirage-bouton" {% if tirages_dispo < 1 or not lots_roue %}disabled{% endif %}>
+                {% if tirages_dispo < 1 %}🔒 Faites un achat pour jouer{% else %}🎡 Tourner la roue{% endif %}
             </button>
             <div class="tirage-resultat" id="tirage-resultat" hidden>
                 <span class="tirage-resultat-icone" id="tirage-resultat-icone"></span>
@@ -793,10 +811,58 @@ function ouvrirNiveau(titre, avantages) {
     var coffre = document.getElementById('tirage-royal');
     if (coffre) {
         var bouton = document.getElementById('tirage-bouton');
-        var boite = document.getElementById('tirage-boite');
         var compteur = document.getElementById('tirage-compteur');
         var resultat = document.getElementById('tirage-resultat');
+        var zone = document.getElementById('roue-zone');
+        var roue = document.getElementById('roue-svg');
+        var fleche = document.getElementById('roue-fleche');
+        var lots = [];
+        var rotation = 0;
         var enCours = false;
+        var SVG = 'http://www.w3.org/2000/svg';
+        var reduit = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+        function noeud(nom, attributs, texte) {
+            var el = document.createElementNS(SVG, nom);
+            for (var cle in attributs) { el.setAttribute(cle, attributs[cle]); }
+            if (texte !== undefined) { el.textContent = texte; }
+            return el;
+        }
+        function point(angle, rayon) {
+            var rad = angle * Math.PI / 180;
+            return [(rayon * Math.sin(rad)).toFixed(3), (-rayon * Math.cos(rad)).toFixed(3)];
+        }
+
+        function dessinerRoue() {
+            if (!zone || !roue) return;
+            try { lots = JSON.parse(zone.getAttribute('data-lots') || '[]'); } catch (e) { lots = []; }
+            var n = lots.length;
+            if (!n) return;
+            var part = 360 / n;
+            var couleurs = ['#8B0000', '#D4AF37'];
+            roue.appendChild(noeud('circle', { cx: 0, cy: 0, r: 103, fill: '#3a0000' }));
+            lots.forEach(function (lot, i) {
+                var fond = couleurs[i % 2];
+                if (n % 2 === 1 && i === n - 1) fond = '#B22222';
+                var clair = (fond === '#D4AF37');
+                var a = point(i * part, 98), b = point((i + 1) * part, 98);
+                var d = 'M0,0 L' + a[0] + ',' + a[1] + ' A98,98 0 ' + (part > 180 ? 1 : 0) + ' 1 ' + b[0] + ',' + b[1] + ' Z';
+                roue.appendChild(noeud('path', { d: d, fill: fond, stroke: '#FFF3C4', 'stroke-width': 1.2 }));
+                var g = noeud('g', { transform: 'rotate(' + ((i + 0.5) * part).toFixed(2) + ')' });
+                var tailleIcone = n <= 6 ? 20 : (n <= 10 ? 16 : 13);
+                g.appendChild(noeud('text', { x: 0, y: -66, 'text-anchor': 'middle', 'font-size': tailleIcone }, lot.icone));
+                if (n <= 6) {
+                    var nom = lot.nom.length > 10 ? lot.nom.slice(0, 9) + '…' : lot.nom;
+                    g.appendChild(noeud('text', { x: 0, y: -46, 'text-anchor': 'middle', 'font-size': 7.5, 'font-weight': 700, fill: clair ? '#3a0000' : '#fff' }, nom));
+                }
+                roue.appendChild(g);
+            });
+            for (var k = 0; k < n; k++) {
+                var p = point(k * part, 98);
+                roue.appendChild(noeud('circle', { cx: p[0], cy: p[1], r: 2.4, fill: '#FFF3C4' }));
+            }
+            roue.appendChild(noeud('circle', { cx: 0, cy: 0, r: 102, fill: 'none', stroke: '#FFD54F', 'stroke-width': 3 }));
+        }
 
         function confettis() {
             var symboles = ['🎊', '✨', '⭐', '🎉', '👑'];
@@ -813,40 +879,49 @@ function ouvrirNiveau(titre, avantages) {
         }
 
         function afficher(donnees, estErreur) {
-            coffre.classList.remove('tirage-secoue');
-            coffre.classList.add('tirage-ouvert');
+            coffre.classList.remove('roue-attente');
             document.getElementById('tirage-resultat-icone').textContent = estErreur ? '🔒' : donnees.icone;
             document.getElementById('tirage-resultat-titre').textContent = estErreur ? 'Oups' : donnees.titre;
             document.getElementById('tirage-resultat-message').textContent = donnees.message;
-            boite.textContent = (!estErreur && donnees.resultat !== 'perdu') ? '🎉' : '💨';
             resultat.hidden = false;
             if (!estErreur && donnees.resultat !== 'perdu') confettis();
-            if (typeof donnees.restants === 'number') {
-                compteur.textContent = donnees.restants;
-            }
+            if (typeof donnees.restants === 'number') { compteur.textContent = donnees.restants; }
+            enCours = false;
+            var reste = parseInt(compteur.textContent, 10) || 0;
+            bouton.disabled = reste < 1;
+            bouton.textContent = reste < 1 ? '🔒 Faites un achat pour jouer' : '🎡 Tourner encore';
         }
+
+        function tournerVers(donnees) {
+            var index = -1;
+            for (var i = 0; i < lots.length; i++) { if (lots[i].id === donnees.lot_id) { index = i; break; } }
+            if (index < 0) { index = Math.floor(Math.random() * lots.length); }
+            var part = 360 / lots.length;
+            var centre = (index + 0.5) * part;
+            var ecart = (Math.random() - 0.5) * part * 0.6;
+            var duree = reduit ? 400 : 5200;
+            rotation = Math.ceil(rotation / 360) * 360 + 360 * 5 + (360 - centre) + ecart;
+            roue.style.transition = 'transform ' + duree + 'ms cubic-bezier(0.12, 0.62, 0.1, 1)';
+            roue.style.transform = 'rotate(' + rotation + 'deg)';
+            setTimeout(function () {
+                if (fleche) { fleche.classList.remove('roue-rebond'); void fleche.offsetWidth; fleche.classList.add('roue-rebond'); }
+                afficher(donnees, false);
+            }, duree + 150);
+        }
+
+        dessinerRoue();
 
         bouton.addEventListener('click', function () {
             if (enCours || bouton.disabled) return;
             enCours = true;
             bouton.disabled = true;
             resultat.hidden = true;
-            coffre.classList.remove('tirage-ouvert');
-            coffre.classList.add('tirage-secoue');
-            boite.textContent = '🧰';
-            var debut = Date.now();
+            coffre.classList.add('roue-attente');
             fetch(coffre.getAttribute('data-url'), { method: 'POST', headers: { 'X-Requested-With': 'fetch' } })
                 .then(function (reponse) { return reponse.json().catch(function () { return { ok: false, message: 'Réponse inattendue du serveur.' }; }); })
                 .catch(function () { return { ok: false, message: 'Pas de connexion : réessayez dans un instant.' }; })
                 .then(function (donnees) {
-                    var attente = Math.max(0, 1300 - (Date.now() - debut));
-                    setTimeout(function () {
-                        afficher(donnees, !donnees.ok);
-                        enCours = false;
-                        var reste = parseInt(compteur.textContent, 10) || 0;
-                        bouton.disabled = reste < 1;
-                        bouton.textContent = reste < 1 ? '🔒 Faites un achat pour jouer' : '🔓 Ouvrir encore';
-                    }, attente);
+                    if (donnees.ok && lots.length) { tournerVers(donnees); } else { afficher(donnees, !donnees.ok); }
                 });
         });
 
