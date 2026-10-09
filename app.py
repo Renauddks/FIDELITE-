@@ -1275,8 +1275,16 @@ def carte_client(lien_unique):
         for l in db.execute("SELECT id, nom, icone, type_lot FROM tirage_lots WHERE actif = 1 ORDER BY id").fetchall()
     ]
 
+    texte_commande = (
+        "Bonjour Sandwich du Roi 👑, je souhaite passer une commande pour gagner un tour à la Roue du Roi.\n"
+        f"Client : {client['prenom']} {client['nom']}"
+        + (f"\nNuméro : {client['numero']}" if client["numero"] else "")
+    )
+    lien_commande_roue = lien_whatsapp(WHATSAPP_SANDWICH_DU_ROI, texte_commande)
+
     return render_template(
         "carte_client.html",
+        lien_commande_roue=lien_commande_roue,
         tirages_dispo=tirages_dispo,
         lots_visibles=lots_visibles,
         lots_roue=lots_roue,
