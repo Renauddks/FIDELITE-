@@ -219,6 +219,9 @@
 .tirage-bouton { width: 100%; font-size: 1.05rem; font-weight: 800; background: linear-gradient(180deg, #FFE082, #D4AF37); color: #3a0000; border: 2px solid #FFF3C4; box-shadow: 0 0 14px rgba(255,213,79,0.55); }
 .tirage-bouton:not([disabled]) { animation: tirage-respire 1.8s ease-in-out infinite; }
 .tirage-bouton[disabled] { opacity: 0.55; cursor: not-allowed; }
+.tirage-commander { display: block; margin-top: 0.6rem; padding: 0.8rem 1rem; border-radius: 12px; background: #25D366; color: #fff !important; font-weight: 800; font-size: 1.02rem; text-align: center; text-decoration: none; border: 2px solid #b6f5cd; box-shadow: 0 0 14px rgba(37,211,102,0.45); }
+.tirage-commander:active { transform: scale(0.98); }
+.tirage-commander-aide { margin: 0.35rem 0 0; font-size: 0.78rem; opacity: 0.85; }
 .tirage-resultat { margin-top: 0.8rem; background: #fff; color: #3a0000; border-radius: 12px; padding: 0.9rem; position: relative; animation: tirage-apparait 0.4s ease-out; }
 .tirage-resultat[hidden] { display: none; }
 .tirage-resultat-icone { font-size: 2.6rem; display: block; }
@@ -505,8 +508,12 @@
             {% endif %}
             <p class="tirage-compteur">🎟️ Tirages disponibles : <strong id="tirage-compteur">{{ tirages_dispo }}</strong></p>
             <button type="button" id="tirage-bouton" class="bouton bouton-principal tirage-bouton" {% if tirages_dispo < 1 or not lots_roue %}disabled{% endif %}>
-                {% if tirages_dispo < 1 %}🔒 Faites un achat pour jouer{% else %}🎡 Tourner la roue{% endif %}
+                {% if tirages_dispo < 1 %}🔒 Aucun tirage disponible{% else %}🎡 Tourner la roue{% endif %}
             </button>
+            {% if lien_commande_roue %}
+            <a href="{{ lien_commande_roue }}" target="_blank" rel="noopener" class="tirage-commander">🛒 Commander pour jouer à la roue</a>
+            <p class="tirage-commander-aide">Chaque commande vous offre un tour de roue. Votre demande part sur le WhatsApp de Sandwich du Roi.</p>
+            {% endif %}
             <div class="tirage-resultat" id="tirage-resultat" hidden>
                 <span class="tirage-resultat-icone" id="tirage-resultat-icone"></span>
                 <strong class="tirage-resultat-titre" id="tirage-resultat-titre"></strong>
@@ -889,7 +896,7 @@ function ouvrirNiveau(titre, avantages) {
             enCours = false;
             var reste = parseInt(compteur.textContent, 10) || 0;
             bouton.disabled = reste < 1;
-            bouton.textContent = reste < 1 ? '🔒 Faites un achat pour jouer' : '🎡 Tourner encore';
+            bouton.textContent = reste < 1 ? '🔒 Aucun tirage disponible' : '🎡 Tourner encore';
         }
 
         function tournerVers(donnees) {
