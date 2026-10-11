@@ -243,6 +243,44 @@
 @keyframes roue-rebond { 0%,100% { transform: rotate(0); } 40% { transform: rotate(-14deg); } 70% { transform: rotate(6deg); } }
 .roue-moyeu { position: absolute; top: 50%; left: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #FFF3C4, #D4AF37 60%, #8a6d0b); border: 3px solid #5a0a0a; display: flex; align-items: center; justify-content: center; font-size: 1.5rem; z-index: 2; box-shadow: 0 2px 6px rgba(0,0,0,0.5); }
 .tirage-royal.roue-attente .roue-moyeu { animation: tirage-respire 0.5s ease-in-out infinite; }
+
+/* --- Quête de la semaine, quiz, badges --- */
+.jeux-explication { font-size: 0.8rem; margin-bottom: 0.8rem; }
+.badge-usage { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: 700; vertical-align: middle; }
+.badge-usage-jeux { background: #efe3ff; color: #5b21b6; }
+.badge-usage-niveau { background: #e3f4e8; color: #1a6b35; }
+.quete-carte { background: #fffaf0; border: 2px solid #D4AF37; border-radius: 16px; padding: 0.9rem; margin-bottom: 1.1rem; }
+.quete-titre { margin: 0 0 0.6rem; font-size: 1.1rem; font-weight: 800; color: #8B0000; text-align: center; }
+.quete-item { background: #fff; border: 1px solid #ead9a3; border-radius: 12px; padding: 0.7rem; margin-bottom: 0.6rem; }
+.quete-item.quete-faite { background: #eefaf1; border-color: #7ccf93; }
+.quete-entete { display: flex; gap: 0.6rem; align-items: flex-start; }
+.quete-icone { font-size: 1.8rem; line-height: 1; }
+.quete-description { margin: 0.15rem 0 0; font-size: 0.82rem; color: #555; }
+.quete-barre { height: 12px; border-radius: 8px; background: #eee3c4; overflow: hidden; margin: 0.6rem 0 0.3rem; }
+.quete-barre-remplie { height: 100%; border-radius: 8px; background: linear-gradient(90deg, #D4AF37, #8B0000); transition: width 0.6s ease; }
+.quete-faite .quete-barre-remplie { background: linear-gradient(90deg, #4CAF50, #2e7d32); }
+.quete-progression { margin: 0; font-size: 0.88rem; font-weight: 700; color: #3a0000; }
+.quete-fin { margin: 0.15rem 0 0; font-size: 0.78rem; color: #8a6d0b; }
+.quiz-royal { background: linear-gradient(160deg, #1a1446, #3b2a8c 60%, #231a63); color: #fff; border: 2px solid #9d8cff; border-radius: 16px; padding: 1rem; margin-bottom: 1.1rem; text-align: center; }
+.quiz-titre { margin: 0; font-size: 1.15rem; font-weight: 800; color: #d8ceff; }
+.quiz-sous-titre { margin: 0.2rem 0 0.6rem; font-size: 0.82rem; opacity: 0.9; }
+.quiz-compteur { margin: 0.2rem 0 0.7rem; font-size: 0.95rem; }
+.quiz-bouton { width: 100%; padding: 0.8rem 1rem; border: 2px solid #e5deff; border-radius: 12px; background: linear-gradient(180deg, #c9bcff, #8f7bff); color: #1a1446; font-weight: 800; font-size: 1.02rem; cursor: pointer; }
+.quiz-bouton[disabled] { opacity: 0.5; cursor: not-allowed; }
+.quiz-bouton[hidden], .quiz-jeu[hidden], .quiz-fin[hidden], .quiz-explication[hidden] { display: none; }
+.quiz-jeu { margin-top: 0.8rem; text-align: left; }
+.quiz-progression { margin: 0 0 0.3rem; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.5px; color: #cfc6ff; }
+.quiz-question { margin: 0 0 0.7rem; font-size: 1.05rem; font-weight: 700; line-height: 1.35; }
+.quiz-choix { display: flex; flex-direction: column; gap: 0.45rem; margin-bottom: 0.6rem; }
+.quiz-choix-bouton { width: 100%; padding: 0.7rem 0.8rem; border-radius: 10px; border: 2px solid rgba(255,255,255,0.35); background: rgba(255,255,255,0.1); color: #fff; font-size: 0.95rem; text-align: left; cursor: pointer; }
+.quiz-choix-bouton[disabled] { cursor: default; }
+.quiz-choix-bouton.quiz-juste { background: #2e9d57; border-color: #b8f0cb; }
+.quiz-choix-bouton.quiz-faux { background: #b3261e; border-color: #ffc9c4; }
+.quiz-explication { margin: 0 0 0.6rem; padding: 0.55rem 0.7rem; border-radius: 10px; background: rgba(255,255,255,0.14); font-size: 0.86rem; }
+.quiz-fin { margin-top: 0.8rem; background: #fff; color: #1a1446; border-radius: 12px; padding: 0.9rem; }
+.quiz-fin-icone { font-size: 2.4rem; display: block; }
+.quiz-fin-titre { display: block; font-size: 1.15rem; margin: 0.2rem 0; }
+.quiz-fin-message { margin: 0 0 0.7rem; font-size: 0.9rem; }
 @media (prefers-reduced-motion: reduce) { .tirage-royal * { animation: none !important; } }
 </style>
 
@@ -489,14 +527,36 @@
 <!-- VUE : MISSIONS -->
 <div id="vue-missions" class="vue-section vue-cachee">
     <div class="carte-missions">
-        <p class="titre-section">🎯 Missions bonus</p>
-        {% if client.nombre_achats < 1 %}
-        <p class="texte-verrouille">🔒 Les missions se débloquent après votre premier achat. Passez nous voir : chaque achat vous offrira aussi un tirage au Coffre du Roi !</p>
-        {% else %}
+        <p class="titre-section">🎮 Les jeux du Roi</p>
+        <p class="texte-aide jeux-explication">ℹ️ Un achat sert soit à votre <strong>rang 📈</strong>, soit aux <strong>jeux 🎮</strong> (roue, quête, quiz) : la boutique l'indique à l'enregistrement, et vous le voyez dans votre historique.</p>
+
+        {% if quetes_semaine %}
+        <div class="quete-carte">
+            <p class="quete-titre">📅 Quête de la semaine</p>
+            {% for q in quetes_semaine %}
+            <div class="quete-item {% if q.accomplie %}quete-faite{% endif %}">
+                <div class="quete-entete">
+                    <span class="quete-icone">{{ q.icone }}</span>
+                    <div>
+                        <strong>{{ q.titre }}</strong>
+                        {% if q.description %}<p class="quete-description">{{ q.description }}</p>{% endif %}
+                    </div>
+                </div>
+                <div class="quete-barre"><div class="quete-barre-remplie" style="width: {{ q.pourcentage }}%"></div></div>
+                <p class="quete-progression">
+                    {% if q.accomplie %}✅ Quête accomplie !{% else %}{{ q.valeur }} / {{ q.cible }} {{ q.unite }}{{ 's' if q.unite != 'FCFA' and q.cible > 1 else '' }}{% endif %}
+                    · 🎁 {{ q.recompense }}
+                </p>
+                <p class="quete-fin">⏳ Jusqu'au {{ q.fin }}{% if q.jours_restants == 0 %} — dernier jour !{% endif %}</p>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
         <!-- Coffre du Roi : un tirage offert à chaque achat -->
         <div class="tirage-royal" id="tirage-royal" data-url="{{ url_for('ouvrir_coffre_tirage', lien_unique=client.lien_unique) }}">
             <p class="tirage-titre">🎡 La Roue du Roi</p>
-            <p class="tirage-sous-titre">Chaque achat vous offre un tirage, valable {{ tirage_validite }} jours.</p>
+            <p class="tirage-sous-titre">Chaque achat « Jeux » vous offre un tirage, valable {{ tirage_validite }} jours.</p>
             {% if lots_roue %}
             <div class="roue-zone" id="roue-zone" data-lots='{{ lots_roue|tojson }}'>
                 <span class="roue-fleche" id="roue-fleche"></span>
@@ -528,6 +588,36 @@
             {% endif %}
         </div>
 
+        <!-- Quiz du Roi : une partie offerte à chaque achat « Jeux » -->
+        <div class="quiz-royal" id="quiz-royal" data-commencer="{{ url_for('quiz_commencer', lien_unique=client.lien_unique) }}" data-repondre="{{ url_for('quiz_repondre', lien_unique=client.lien_unique) }}">
+            <p class="quiz-titre">🧠 Le Quiz du Roi</p>
+            <p class="quiz-sous-titre">Chaque achat « Jeux » vous offre une partie : répondez juste et gagnez des points !</p>
+            <p class="quiz-compteur">🎟️ Parties disponibles : <strong id="quiz-compteur">{{ quiz_dispo }}</strong></p>
+            <button type="button" id="quiz-bouton" class="quiz-bouton" {% if quiz_dispo < 1 and not quiz_en_cours %}disabled{% endif %}>
+                {% if quiz_en_cours %}▶️ Reprendre le quiz{% elif quiz_dispo < 1 %}🔒 Aucune partie disponible{% else %}🧠 Jouer au quiz{% endif %}
+            </button>
+            <div class="quiz-jeu" id="quiz-jeu" hidden>
+                <p class="quiz-progression" id="quiz-progression"></p>
+                <p class="quiz-question" id="quiz-question"></p>
+                <div class="quiz-choix" id="quiz-choix"></div>
+                <p class="quiz-explication" id="quiz-explication" hidden></p>
+                <button type="button" id="quiz-suivant" class="quiz-bouton" hidden>Suivant ➜</button>
+            </div>
+            <div class="quiz-fin" id="quiz-fin" hidden>
+                <span class="quiz-fin-icone" id="quiz-fin-icone"></span>
+                <strong class="quiz-fin-titre" id="quiz-fin-titre"></strong>
+                <p class="quiz-fin-message" id="quiz-fin-message"></p>
+                <button type="button" id="quiz-fermer" class="bouton bouton-secondaire">OK</button>
+            </div>
+            {% if quiz_dispo < 1 and not quiz_en_cours and lien_commande_roue %}
+            <a href="{{ lien_commande_roue }}" target="_blank" rel="noopener" class="tirage-commander">🛒 Commander pour jouer</a>
+            {% endif %}
+        </div>
+
+        <p class="titre-section">🎯 Missions bonus</p>
+        {% if not a_achete %}
+        <p class="texte-verrouille">🔒 Les missions se débloquent après votre premier achat. Passez nous voir !</p>
+        {% else %}
         <p class="texte-aide">Réalisez ces petits défis entre deux achats pour gagner des points supplémentaires !</p>
 
         <div class="bloc-progression-jour">
@@ -675,13 +765,13 @@
 <div id="vue-historique" class="vue-section vue-cachee">
     <div class="carte-historique">
         <p class="titre-section">📜 Mon historique d'achats</p>
-        <p class="texte-aide">🛍️ Achats effectués : <strong>{{ client.nombre_achats }}</strong></p>
+        <p class="texte-aide">📈 Achats pour le niveau : <strong>{{ client.nombre_achats }}</strong> · 🎮 Achats jeux : <strong>{{ nb_achats_jeux }}</strong></p>
         {% if historique %}
             <div class="liste-historique">
                 {% for achat in historique %}
                 <div class="historique-item">
                     <div>
-                        <p class="historique-date">{{ achat.date_achat }}</p>
+                        <p class="historique-date">{{ achat.date_achat }} <span class="badge-usage badge-usage-{{ achat.usage_achat }}">{{ '🎮 Jeux' if achat.usage_achat == 'jeux' else '📈 Niveau' }}</span></p>
                         {% if achat.note %}<p class="historique-note">{{ achat.note }}</p>{% endif %}
                     </div>
                     <div class="historique-montants">
@@ -938,6 +1028,107 @@ function ouvrirNiveau(titre, avantages) {
         });
     }
     if (window.location.hash === '#missions' && typeof changerVue === 'function') { changerVue('missions'); }
+})();
+
+(function () {
+    var quiz = document.getElementById('quiz-royal');
+    if (!quiz) return;
+    var bouton = document.getElementById('quiz-bouton');
+    var compteur = document.getElementById('quiz-compteur');
+    var jeu = document.getElementById('quiz-jeu');
+    var progression = document.getElementById('quiz-progression');
+    var questionEl = document.getElementById('quiz-question');
+    var choixEl = document.getElementById('quiz-choix');
+    var explication = document.getElementById('quiz-explication');
+    var suivant = document.getElementById('quiz-suivant');
+    var fin = document.getElementById('quiz-fin');
+    var prochaine = null, resultatFinal = null, enCours = false;
+
+    function post(url, corps) {
+        return fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'fetch' },
+            body: JSON.stringify(corps || {})
+        }).then(function (r) { return r.json().catch(function () { return { ok: false, message: 'Réponse inattendue du serveur.' }; }); })
+          .catch(function () { return { ok: false, message: 'Pas de connexion : réessayez dans un instant.' }; });
+    }
+    function maj(restants) {
+        if (typeof restants === 'number') { compteur.textContent = restants; }
+    }
+    function afficherQuestion(d) {
+        fin.hidden = true;
+        jeu.hidden = false;
+        explication.hidden = true;
+        suivant.hidden = true;
+        progression.textContent = 'Question ' + (d.index + 1) + ' / ' + d.total;
+        questionEl.textContent = d.question;
+        choixEl.innerHTML = '';
+        d.choix.forEach(function (texte, i) {
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'quiz-choix-bouton';
+            b.textContent = texte;
+            b.addEventListener('click', function () { repondre(i + 1, d.index); });
+            choixEl.appendChild(b);
+        });
+    }
+    function afficherFin(res) {
+        jeu.hidden = true;
+        fin.hidden = false;
+        bouton.hidden = true;
+        document.getElementById('quiz-fin-icone').textContent = res.parfait ? '🏆' : (res.points > 0 ? '🎉' : '💨');
+        document.getElementById('quiz-fin-titre').textContent = 'Score : ' + res.score + ' / ' + res.total;
+        document.getElementById('quiz-fin-message').textContent = res.points > 0
+            ? '+' + res.points + ' points ajoutés à votre solde !' + (res.parfait ? ' (bonus score parfait)' : '')
+            : 'Pas de point cette fois. Retentez au prochain achat « Jeux » !';
+    }
+    function repondre(numero, index) {
+        if (enCours) return;
+        enCours = true;
+        var boutons = choixEl.querySelectorAll('button');
+        boutons.forEach(function (b) { b.disabled = true; });
+        post(quiz.getAttribute('data-repondre'), { choix: numero, index: index }).then(function (d) {
+            enCours = false;
+            if (!d.ok) {
+                explication.textContent = d.message || 'Une erreur est survenue.';
+                explication.hidden = false;
+                return;
+            }
+            boutons[d.bonne - 1].classList.add('quiz-juste');
+            if (!d.correct) { boutons[numero - 1].classList.add('quiz-faux'); }
+            explication.textContent = (d.correct ? '✅ Bonne réponse ! ' : '❌ Pas tout à fait. ') + (d.explication || '');
+            explication.hidden = false;
+            maj(d.restants);
+            if (d.termine) { prochaine = null; resultatFinal = d.resultat; suivant.textContent = 'Voir mon résultat ➜'; }
+            else { prochaine = d.prochaine; suivant.textContent = 'Question suivante ➜'; }
+            suivant.hidden = false;
+        });
+    }
+
+    suivant.addEventListener('click', function () {
+        if (prochaine) { afficherQuestion(prochaine); } else if (resultatFinal) { afficherFin(resultatFinal); }
+    });
+    bouton.addEventListener('click', function () {
+        if (enCours || bouton.disabled) return;
+        enCours = true;
+        bouton.disabled = true;
+        post(quiz.getAttribute('data-commencer')).then(function (d) {
+            enCours = false;
+            if (!d.ok) {
+                bouton.disabled = false;
+                explication.textContent = d.message || 'Une erreur est survenue.';
+                jeu.hidden = false; explication.hidden = false; questionEl.textContent = ''; choixEl.innerHTML = ''; progression.textContent = '';
+                return;
+            }
+            maj(d.restants);
+            bouton.hidden = true;
+            if (d.termine) { afficherFin(d.resultat); } else { afficherQuestion(d); }
+        });
+    });
+    document.getElementById('quiz-fermer').addEventListener('click', function () {
+        window.location.hash = 'missions';
+        window.location.reload();
+    });
 })();
 
 function changerVue(vue) {

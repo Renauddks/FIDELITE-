@@ -1,0 +1,79 @@
+{% extends "_base.html" %}
+{% block titre %}Quêtes de la semaine{% endblock %}
+{% macro champs_quete(quete=none) %}
+        <label>Titre de la quête</label>
+        <input type="text" name="titre" maxlength="100" value="{{ quete.titre if quete else '' }}" placeholder="Ex : Trois visites cette semaine" required>
+        <label>Description (facultatif)</label>
+        <textarea name="description" rows="2" maxlength="300" placeholder="Ex : Venez 3 fois pour gagner une boisson">{{ quete.description if quete and quete.description else '' }}</textarea>
+        <label>Icône</label>
+        <input type="text" name="icone" maxlength="4" value="{{ quete.icone if quete else '📅' }}" class="champ-icone">
+        <label>Objectif</label>
+        <select name="type_objectif">
+            {% for cle, nom in types_objectif.items() %}
+            <option value="{{ cle }}" {% if (quete.type_objectif if quete else 'achats') == cle %}selected{% endif %}>{{ nom }}</option>
+            {% endfor %}
+        </select>
+        <label>À atteindre (nombre d'achats, de jours ou de FCFA)</label>
+        <input type="number" name="cible" min="1" value="{{ quete.cible if quete else 3 }}" required>
+        <label>Du (début)</label>
+        <input type="date" name="date_debut" value="{{ quete.date_debut if quete else lundi }}" required>
+        <label>Au (fin, inclus)</label>
+        <input type="date" name="date_fin" value="{{ quete.date_fin if quete else dimanche }}" required>
+        <label>🎁 Type de récompense</label>
+        <select name="type_recompense">
+            {% for cle, nom in types_recompense.items() %}
+            <option value="{{ cle }}" {% if (quete.type_recompense if quete else 'points') == cle %}selected{% endif %}>{{ nom }}</option>
+            {% endfor %}
+        </select>
+        <label>Points offerts (obligatoire pour « Points », bonus facultatif sinon)</label>
+        <input type="number" name="points_recompense" min="0" value="{{ quete.points_recompense if quete else 20 }}">
+        <label>Produit du menu (si « Produit du menu »)</label>
+        <select name="produit_id">
+            <option value="">— Choisir un produit —</option>
+            {% for p in menu %}
+            <option value="{{ p.id }}" {% if quete and quete.produit_id == p.id %}selected{% endif %}>{{ p.nom_produit }}</option>
+            {% endfor %}
+        </select>
+        <label>Avantage en nature (si « Autre avantage »)</label>
+        <input type="text" name="recompense_texte" maxlength="200" value="{{ (quete.recompense_texte or '') if quete and quete.type_recompense == 'avantage' else '' }}" placeholder="Ex : boisson offerte">
+{% endmacro %}
+{% block contenu %}
+<a href="{{ url_for('admin_dashboard') }}" class="lien-retour">&larr; Retour au tableau de bord</a>
+
+<h1>📅 Quête de la semaine</h1>
+<p class="texte-aide">
+    Seuls les achats enregistrés comme <strong>🎮 Jeux</strong> comptent. Quand un client atteint l'objectif,
+    sa récompense est accordée automatiquement (une seule fois par quête) et il reçoit une notification.
+</p>
+
+<section class="carte-formulaire">
+    <h2>Créer une quête</h2>
+    <form method="POST" action="{{ url_for('ajouter_quete') }}" class="formulaire-niveau">
+        {{ champs_quete() }}
+        <button type="submit" class="bouton bouton-principal">+ Créer la quête</button>
+    </form>
+</section>
+
+<section class="liste-niveaux">
+    {% for quete in quetes %}
+    <form method="POST" action="{{ url_for('modifier_quete', quete_id=quete.id) }}" class="carte-niveau">
+        <p class="texte-aide">
+            {{ quete.icone }} <strong>{{ quete.titre }}</strong><br>
+            {% if not quete.actif %}⏸️ Désactivée{% elif quete.date_debut <= aujourdhui <= quete.date_fin %}🟢 En cours{% elif quete.date_debut > aujourdhui %}🕒 À venir{% else %}⏹️ Terminée{% endif %}
+            · 🏆 Accomplie par {{ accomplies.get(quete.id, 0) }} client{{ 's' if accomplies.get(quete.id, 0) != 1 else '' }}
+        </p>
+        {{ champs_quete(quete) }}
+        <label class="case-actif">
+            <input type="checkbox" name="actif" {% if quete.actif %}checked{% endif %}>
+            Quête active
+        </label>
+        <div class="carte-niveau-actions">
+            <button type="submit" class="bouton bouton-secondaire bouton-mini">Enregistrer</button>
+            <button type="submit" formaction="{{ url_for('supprimer_quete', quete_id=quete.id) }}" class="bouton bouton-danger bouton-mini" data-confirmation="Supprimer la quête {{ quete.titre }} ?">Supprimer</button>
+        </div>
+    </form>
+    {% else %}
+    <p class="texte-aide">Aucune quête pour l'instant. Créez la quête de cette semaine ci-dessus : les dates sont déjà remplies.</p>
+    {% endfor %}
+</section>
+{% endblock %}

@@ -40,9 +40,19 @@
             <input type="number" step="1" min="0" name="montant" placeholder="0" required
                    oninput="document.getElementById('apercu-points').textContent = Math.max(0, Math.floor((parseFloat(this.value) || 0) / {{ fcfa_par_point }}))">
             <p class="texte-aide">⭐ Points accordés automatiquement : <strong id="apercu-points">0</strong> ({{ fcfa_par_point }} FCFA = 1 point)</p>
+            <label>Cet achat sert pour :</label>
+            <label class="case-actif">
+                <input type="radio" name="usage_achat" value="niveau" checked>
+                📈 <strong>Niveau</strong> — fait progresser le rang du client
+            </label>
+            <label class="case-actif">
+                <input type="radio" name="usage_achat" value="jeux">
+                🎮 <strong>Jeux</strong> — offre 1 tour de roue + 1 partie de quiz et compte pour la quête (le rang ne bouge pas)
+            </label>
+            <p class="texte-aide">Un achat ne compte que d'un côté : jamais de double avantage. Les points (100 FCFA = 1 point) sont accordés dans les deux cas.</p>
             <label>Note (optionnel)</label>
             <input type="text" name="note" placeholder="Ex : sandwich viennois moyen">
-            <button type="submit" class="bouton bouton-principal">+ Ajouter l'achat (case suivante cochée)</button>
+            <button type="submit" class="bouton bouton-principal">+ Enregistrer l'achat</button>
         </form>
     </section>
 
@@ -130,17 +140,18 @@
     <h2>Historique des achats</h2>
     <div class="tableau-scroll">
         <table class="tableau-clients">
-            <thead><tr><th>Date</th><th>Montant</th><th>Points</th><th>Note</th></tr></thead>
+            <thead><tr><th>Date</th><th>Type</th><th>Montant</th><th>Points</th><th>Note</th></tr></thead>
             <tbody>
                 {% for achat in historique %}
                 <tr>
                     <td>{{ achat.date_achat }}</td>
+                    <td>{{ '🎮 Jeux' if achat.usage_achat == 'jeux' else '📈 Niveau' }}</td>
                     <td>{{ achat.montant }} FCFA</td>
                     <td>+{{ achat.points_ajoutes }}</td>
                     <td>{{ achat.note or '—' }}</td>
                 </tr>
                 {% else %}
-                <tr><td colspan="4" class="ligne-vide">Aucun achat enregistré.</td></tr>
+                <tr><td colspan="5" class="ligne-vide">Aucun achat enregistré.</td></tr>
                 {% endfor %}
             </tbody>
         </table>

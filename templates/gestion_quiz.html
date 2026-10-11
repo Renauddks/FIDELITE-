@@ -1,0 +1,82 @@
+{% extends "_base.html" %}
+{% block titre %}Quiz du Roi{% endblock %}
+{% macro champs_question(q=none) %}
+        <label>Question</label>
+        <input type="text" name="question" maxlength="200" value="{{ q.question if q else '' }}" placeholder="Ex : Quel ingrédient se trouve dans notre sandwich viennois ?" required>
+        <label>Choix 1 (obligatoire)</label>
+        <input type="text" name="choix1" maxlength="100" value="{{ q.choix1 if q else '' }}" required>
+        <label>Choix 2 (obligatoire)</label>
+        <input type="text" name="choix2" maxlength="100" value="{{ q.choix2 if q else '' }}" required>
+        <label>Choix 3 (facultatif)</label>
+        <input type="text" name="choix3" maxlength="100" value="{{ q.choix3 if q and q.choix3 else '' }}">
+        <label>Choix 4 (facultatif)</label>
+        <input type="text" name="choix4" maxlength="100" value="{{ q.choix4 if q and q.choix4 else '' }}">
+        <label>Numéro de la bonne réponse</label>
+        <select name="bonne">
+            {% for i in range(1, 5) %}
+            <option value="{{ i }}" {% if (q.bonne if q else 1) == i %}selected{% endif %}>Choix {{ i }}</option>
+            {% endfor %}
+        </select>
+        <label>Explication affichée après la réponse (idéal pour présenter un produit)</label>
+        <input type="text" name="explication" maxlength="300" value="{{ q.explication if q and q.explication else '' }}" placeholder="Ex : Notre viennois est préparé avec…">
+        <label>Points pour une bonne réponse</label>
+        <input type="number" name="points" min="0" value="{{ q.points if q else 5 }}">
+{% endmacro %}
+{% block contenu %}
+<a href="{{ url_for('admin_dashboard') }}" class="lien-retour">&larr; Retour au tableau de bord</a>
+
+<h1>🧠 Quiz du Roi</h1>
+<p class="texte-aide">
+    Chaque achat <strong>🎮 Jeux</strong> offre une partie de {{ par_partie }} question{{ 's' if par_partie != 1 else '' }}, valable {{ validite }} jours.
+    Les questions sont tirées au hasard parmi les questions actives. Score parfait : +{{ bonus }} points de bonus.
+    Aujourd'hui : <strong>{{ stats.parties }}</strong> partie{{ 's' if stats.parties != 1 else '' }} terminée{{ 's' if stats.parties != 1 else '' }}, <strong>{{ stats.points }}</strong> point{{ 's' if stats.points != 1 else '' }} distribué{{ 's' if stats.points != 1 else '' }}.
+</p>
+
+<section class="carte-formulaire">
+    <h2>Ajouter une question</h2>
+    <form method="POST" action="{{ url_for('ajouter_question_quiz') }}" class="formulaire-niveau">
+        {{ champs_question() }}
+        <button type="submit" class="bouton bouton-principal">+ Ajouter la question</button>
+    </form>
+</section>
+
+<section class="liste-niveaux">
+    {% for q in questions %}
+    <form method="POST" action="{{ url_for('modifier_question_quiz', question_id=q.id) }}" class="carte-niveau">
+        <p class="texte-aide">❓ <strong>{{ q.question }}</strong></p>
+        {{ champs_question(q) }}
+        <label class="case-actif">
+            <input type="checkbox" name="actif" {% if q.actif %}checked{% endif %}>
+            Question active
+        </label>
+        <div class="carte-niveau-actions">
+            <button type="submit" class="bouton bouton-secondaire bouton-mini">Enregistrer</button>
+            <button type="submit" formaction="{{ url_for('supprimer_question_quiz', question_id=q.id) }}" class="bouton bouton-danger bouton-mini" data-confirmation="Supprimer cette question ?">Supprimer</button>
+        </div>
+    </form>
+    {% else %}
+    <p class="texte-aide">Aucune question : le quiz est fermé aux clients tant que vous n'en ajoutez pas.</p>
+    {% endfor %}
+</section>
+
+<section class="carte-formulaire">
+    <h2>Dernières parties</h2>
+    <div class="tableau-scroll">
+        <table class="tableau-clients">
+            <thead><tr><th>Date</th><th>Client</th><th>Score</th><th>Points</th></tr></thead>
+            <tbody>
+                {% for p in derniers %}
+                <tr>
+                    <td>{{ p.date_fin }}</td>
+                    <td>{{ p.prenom }} {{ p.nom }}</td>
+                    <td>{{ p.score }}</td>
+                    <td>+{{ p.points_gagnes }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="4">Aucune partie terminée pour le moment.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}
