@@ -185,6 +185,70 @@ def creer_tables(conn):
         )
     """)
 
+    # --- Séparation des achats : « niveau » (progression de rang) ou « jeux » (roue, quête, quiz) ---
+    # Les achats déjà enregistrés restent des achats « niveau » (ils ont déjà compté pour le rang).
+    conn.execute("ALTER TABLE historique_achats ADD COLUMN IF NOT EXISTS usage_achat TEXT NOT NULL DEFAULT 'niveau'")
+    # Un achat « jeux » offre une partie de quiz : colonne comme celle de la roue (anciens achats = déjà utilisés)
+    conn.execute("ALTER TABLE historique_achats ADD COLUMN IF NOT EXISTS quiz_utilise INTEGER NOT NULL DEFAULT 1")
+    conn.execute("ALTER TABLE historique_achats ALTER COLUMN quiz_utilise SET DEFAULT 0")
+
+    # --- Quête de la semaine ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS quetes (
+            id SERIAL PRIMARY KEY,
+            titre TEXT NOT NULL,
+            description TEXT,
+            icone TEXT NOT NULL DEFAULT '📅',
+            type_objectif TEXT NOT NULL DEFAULT 'achats',
+            cible INTEGER NOT NULL DEFAULT 3,
+            date_debut TEXT NOT NULL,
+            date_fin TEXT NOT NULL,
+            points_recompense INTEGER NOT NULL DEFAULT 0,
+            type_recompense TEXT NOT NULL DEFAULT 'points',
+            produit_id INTEGER,
+            recompense_texte TEXT,
+            actif INTEGER NOT NULL DEFAULT 1
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS quetes_realisees (
+            quete_id INTEGER NOT NULL REFERENCES quetes (id) ON DELETE CASCADE,
+            client_id INTEGER NOT NULL REFERENCES clients_fidelite (id) ON DELETE CASCADE,
+            date_realisee TEXT NOT NULL,
+            code_bon TEXT,
+            PRIMARY KEY (quete_id, client_id)
+        )
+    """)
+
+    # --- Quiz du Roi ---
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS quiz_questions (
+            id SERIAL PRIMARY KEY,
+            question TEXT NOT NULL,
+            choix1 TEXT NOT NULL,
+            choix2 TEXT NOT NULL,
+            choix3 TEXT,
+            choix4 TEXT,
+            bonne INTEGER NOT NULL DEFAULT 1,
+            explication TEXT,
+            points INTEGER NOT NULL DEFAULT 5,
+            actif INTEGER NOT NULL DEFAULT 1
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS quiz_parties (
+            id SERIAL PRIMARY KEY,
+            client_id INTEGER NOT NULL REFERENCES clients_fidelite (id) ON DELETE CASCADE,
+            question_ids TEXT NOT NULL,
+            reponses TEXT NOT NULL DEFAULT '',
+            score INTEGER NOT NULL DEFAULT 0,
+            points_gagnes INTEGER NOT NULL DEFAULT 0,
+            statut TEXT NOT NULL DEFAULT 'en_cours',
+            date_debut TEXT NOT NULL,
+            date_fin TEXT
+        )
+    """)
+
     # Photos des clients et captures de preuve : stockées dans la base
     # (le disque de Render gratuit est effacé à chaque redémarrage).
     conn.execute("""
@@ -288,6 +352,29 @@ def seed_tirage_lots(conn):
     conn.commit()
 
 
+def seed_quiz_questions(conn):
+    """Questions d'exemple sur le programme (à remplacer par vos produits dans Admin → Quiz du Roi)."""
+    if conn.execute("SELECT COUNT(*) FROM quiz_questions").fetchone()[0] > 0:
+        return
+    questions = [
+        ("Combien de FCFA faut-il dépenser pour gagner 1 point de fidélité ?",
+         "50 FCFA", "100 FCFA", "500 FCFA", "1 000 FCFA", 2,
+         "Chaque tranche de 100 FCFA dépensés vous donne 1 point !", 5),
+        ("Dans quel onglet retrouve-t-on les bons gagnés ?",
+         "📜 Historique", "🤝 Partager", "🍔 Échanger", "🎁 Privilèges", 3,
+         "Vos bons gagnés sont dans l'onglet 🍔 Échanger : montrez le code en boutique.", 5),
+        ("Que se passe-t-il si on ne commande pas pendant 30 jours ?",
+         "Rien du tout", "On perd tous ses points", "Le niveau peut descendre d'un palier", "La carte est supprimée", 3,
+         "Pensez à commander régulièrement pour garder votre rang !", 5),
+    ]
+    conn.executemany(
+        """INSERT INTO quiz_questions (question, choix1, choix2, choix3, choix4, bonne, explication, points)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        questions,
+    )
+    conn.commit()
+
+
 def main():
     conn = db_compat.connecter()
     creer_tables(conn)
@@ -295,6 +382,7 @@ def main():
     seed_menu_echange(conn)
     seed_missions(conn)
     seed_tirage_lots(conn)
+    seed_quiz_questions(conn)
     conn.close()
     print("Base de données FIDÉLITÉ+ prête (PostgreSQL).")
 

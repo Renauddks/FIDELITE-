@@ -83,6 +83,7 @@ def init_db_if_needed():
     init_db.seed_menu_echange(conn)
     init_db.seed_missions(conn)
     init_db.seed_tirage_lots(conn)
+    init_db.seed_quiz_questions(conn)
     conn.close()
 
 
@@ -489,7 +490,7 @@ JOURS_PAR_PALIER_INACTIVITE = 30  # durée d'inactivité avant de perdre un pali
 def get_derniere_date_achat(db, client):
     """Date du dernier achat du client, ou date de création de sa carte s'il n'a jamais acheté."""
     row = db.execute(
-        "SELECT MAX(date_achat) AS derniere FROM historique_achats WHERE client_id = ?",
+        "SELECT MAX(date_achat) AS derniere FROM historique_achats WHERE client_id = ? AND usage_achat = 'niveau'",
         (client["id"],),
     ).fetchone()
     reference = row["derniere"] if row and row["derniere"] else client["date_creation"]
@@ -828,7 +829,7 @@ def tirages_disponibles(db, client_id):
     """Nombre de tirages que le client peut encore utiliser (1 par achat, valables quelques jours)."""
     ligne = db.execute(
         """SELECT COUNT(*) AS n FROM historique_achats
-           WHERE client_id = ? AND tirage_utilise = 0 AND montant > 0 AND date_achat >= ?""",
+           WHERE client_id = ? AND usage_achat = 'jeux' AND tirage_utilise = 0 AND montant > 0 AND date_achat >= ?""",
         (client_id, limite_validite_tirage()),
     ).fetchone()
     return ligne["n"]
@@ -839,7 +840,7 @@ def consommer_tirage(db, client_id):
     ligne = db.execute(
         """UPDATE historique_achats SET tirage_utilise = 1
            WHERE id = (SELECT id FROM historique_achats
-                       WHERE client_id = ? AND tirage_utilise = 0 AND montant > 0 AND date_achat >= ?
+                       WHERE client_id = ? AND usage_achat = 'jeux' AND tirage_utilise = 0 AND montant > 0 AND date_achat >= ?
                        ORDER BY id LIMIT 1)
              AND tirage_utilise = 0
            RETURNING id""",
@@ -1051,6 +1052,509 @@ def supprimer_lot_coffre(lot_id):
     db.commit()
     flash("Lot supprimé du coffre.", "warning")
     return redirect(url_for("gestion_coffre"))
+
+
+# ----------------------------------------------------------------------
+# SÉPARATION DES ACHATS : « niveau » (progression de rang) ou « jeux » (roue, quête, quiz)
+# ----------------------------------------------------------------------
+# Un même achat ne sert qu'à UN seul côté, pour éviter un double avantage :
+#   📈 niveau : compte pour le rang (nombre d'achats, inactivité) ;
+#   🎮 jeux   : offre 1 tour de roue + 1 partie de quiz et compte pour la quête de la semaine.
+# Les points de fidélité (100 FCFA = 1 point) sont accordés dans les deux cas.
+USAGES_ACHAT = {"niveau": "📈 Niveau", "jeux": "🎮 Jeux"}
+JOURS_SEMAINE = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
+
+
+def client_a_achete(db, client):
+    """True si le client a déjà au moins un achat enregistré (niveau ou jeux)."""
+    if client["nombre_achats"] >= 1:
+        return True
+    return db.execute(
+        "SELECT 1 FROM historique_achats WHERE client_id = ? LIMIT 1", (client["id"],)
+    ).fetchone() is not None
+
+
+def date_fr(iso):
+    """« 2026-10-11 » -> « dimanche 11/10 »."""
+    try:
+        d = datetime.strptime(iso, "%Y-%m-%d")
+    except (TypeError, ValueError):
+        return iso or ""
+    return f"{JOURS_SEMAINE[d.weekday()]} {d.day:02d}/{d.month:02d}"
+
+
+app.jinja_env.globals["date_fr"] = date_fr
+
+
+# ----------------------------------------------------------------------
+# QUÊTE DE LA SEMAINE
+# ----------------------------------------------------------------------
+TYPES_OBJECTIF_QUETE = {
+    "achats": "🛍️ Nombre d'achats « Jeux »",
+    "jours": "📆 Jours différents avec un achat « Jeux »",
+    "montant": "💰 Montant cumulé des achats « Jeux » (FCFA)",
+}
+UNITES_QUETE = {"achats": "achat", "jours": "jour", "montant": "FCFA"}
+
+
+def valeur_quete(db, quete, client_id):
+    """Progression du client sur une quête (achats « jeux » entre la date de début et de fin)."""
+    if quete["type_objectif"] == "jours":
+        selection = "COUNT(DISTINCT substr(date_achat, 1, 10))"
+    elif quete["type_objectif"] == "montant":
+        selection = "COALESCE(SUM(montant), 0)"
+    else:
+        selection = "COUNT(*)"
+    ligne = db.execute(
+        f"""SELECT {selection} AS v FROM historique_achats
+            WHERE client_id = ? AND usage_achat = 'jeux'
+              AND substr(date_achat, 1, 10) >= ? AND substr(date_achat, 1, 10) <= ?""",
+        (client_id, quete["date_debut"], quete["date_fin"]),
+    ).fetchone()
+    return int(ligne["v"] or 0)
+
+
+def quetes_en_cours(db):
+    aujourdhui = datetime.now().strftime("%Y-%m-%d")
+    return db.execute(
+        "SELECT * FROM quetes WHERE actif = 1 AND date_debut <= ? AND date_fin >= ? ORDER BY id",
+        (aujourdhui, aujourdhui),
+    ).fetchall()
+
+
+def evaluer_quetes(db, client_id):
+    """Accorde la récompense des quêtes que le client vient d'accomplir. Renvoie les titres accomplis."""
+    accomplies = []
+    for quete in quetes_en_cours(db):
+        deja = db.execute(
+            "SELECT 1 FROM quetes_realisees WHERE quete_id = ? AND client_id = ?", (quete["id"], client_id)
+        ).fetchone()
+        if deja or valeur_quete(db, quete, client_id) < quete["cible"]:
+            continue
+        pseudo = {
+            "points_recompense": quete["points_recompense"], "type_recompense": quete["type_recompense"],
+            "produit_id": quete["produit_id"], "recompense_texte": quete["recompense_texte"],
+            "titre": quete["titre"],
+        }
+        code = accorder_recompense(db, pseudo, client_id, origine="Quête de la semaine")
+        db.execute(
+            "INSERT INTO quetes_realisees (quete_id, client_id, date_realisee, code_bon) VALUES (?, ?, ?, ?)",
+            (quete["id"], client_id, datetime.now().strftime(FORMAT_DATE), code),
+        )
+        message = f"📅 Quête accomplie : {quete['titre']} ! Récompense : {libelle_recompense(quete)}."
+        if code:
+            message += f" Votre bon {code} est dans l'onglet 🍔 Échanger."
+        notifier(db, client_id, message)
+        accomplies.append(quete["titre"])
+    return accomplies
+
+
+def quetes_pour_client(db, client_id):
+    """Quêtes en cours avec la progression du client (pour l'affichage de sa carte)."""
+    aujourdhui = datetime.now().date()
+    liste = []
+    for quete in quetes_en_cours(db):
+        valeur = valeur_quete(db, quete, client_id)
+        cible = max(1, quete["cible"])
+        fin = datetime.strptime(quete["date_fin"], "%Y-%m-%d").date()
+        liste.append({
+            "id": quete["id"], "titre": quete["titre"], "description": quete["description"],
+            "icone": quete["icone"], "unite": UNITES_QUETE.get(quete["type_objectif"], ""),
+            "type_objectif": quete["type_objectif"], "cible": cible, "valeur": min(valeur, cible),
+            "pourcentage": min(100, int(100 * valeur / cible)),
+            "accomplie": db.execute(
+                "SELECT 1 FROM quetes_realisees WHERE quete_id = ? AND client_id = ?", (quete["id"], client_id)
+            ).fetchone() is not None,
+            "fin": date_fr(quete["date_fin"]), "jours_restants": max(0, (fin - aujourdhui).days),
+            "recompense": libelle_recompense(quete),
+        })
+    return liste
+
+
+def lire_quete_formulaire(db):
+    """Lit le formulaire d'une quête : dict prêt à enregistrer, ou None si invalide."""
+    titre = request.form.get("titre", "").strip()[:100]
+    if not titre:
+        flash("Donnez un titre à la quête.", "danger")
+        return None
+    type_objectif = request.form.get("type_objectif", "achats")
+    if type_objectif not in TYPES_OBJECTIF_QUETE:
+        type_objectif = "achats"
+    try:
+        cible = max(1, int(request.form.get("cible", "3") or 3))
+        debut = datetime.strptime(request.form.get("date_debut", ""), "%Y-%m-%d")
+        fin = datetime.strptime(request.form.get("date_fin", ""), "%Y-%m-%d")
+    except ValueError:
+        flash("Vérifiez l'objectif et les dates (début et fin).", "danger")
+        return None
+    if fin < debut:
+        flash("La date de fin doit être après la date de début.", "danger")
+        return None
+    recompense = lire_recompense_formulaire(db)
+    if recompense is None:
+        return None
+    type_recompense, points, produit_id, texte = recompense
+    return {
+        "titre": titre, "description": request.form.get("description", "").strip()[:300],
+        "icone": request.form.get("icone", "📅").strip()[:4] or "📅", "type_objectif": type_objectif,
+        "cible": cible, "date_debut": debut.strftime("%Y-%m-%d"), "date_fin": fin.strftime("%Y-%m-%d"),
+        "points": points, "type_recompense": type_recompense, "produit_id": produit_id, "texte": texte,
+    }
+
+
+@app.route("/admin/quetes")
+@admin_requis
+def gestion_quetes():
+    db = get_db()
+    quetes = db.execute("SELECT * FROM quetes ORDER BY date_debut DESC, id DESC").fetchall()
+    accomplies = {
+        l["quete_id"]: l["n"] for l in db.execute(
+            "SELECT quete_id, COUNT(*) AS n FROM quetes_realisees GROUP BY quete_id"
+        ).fetchall()
+    }
+    aujourdhui = datetime.now().date()
+    lundi = aujourdhui - timedelta(days=aujourdhui.weekday())
+    return render_template(
+        "gestion_quetes.html", quetes=quetes, accomplies=accomplies, types_objectif=TYPES_OBJECTIF_QUETE,
+        types_recompense=TYPES_RECOMPENSE, aujourdhui=aujourdhui.strftime("%Y-%m-%d"),
+        lundi=lundi.strftime("%Y-%m-%d"), dimanche=(lundi + timedelta(days=6)).strftime("%Y-%m-%d"),
+        menu=db.execute("SELECT * FROM menu_echange WHERE actif = 1 ORDER BY nom_produit").fetchall(),
+    )
+
+
+@app.route("/admin/quetes/ajouter", methods=["POST"])
+@admin_requis
+def ajouter_quete():
+    db = get_db()
+    q = lire_quete_formulaire(db)
+    if q is not None:
+        db.execute(
+            """INSERT INTO quetes (titre, description, icone, type_objectif, cible, date_debut, date_fin,
+                                   points_recompense, type_recompense, produit_id, recompense_texte, actif)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)""",
+            (q["titre"], q["description"], q["icone"], q["type_objectif"], q["cible"], q["date_debut"],
+             q["date_fin"], q["points"], q["type_recompense"], q["produit_id"], q["texte"]),
+        )
+        db.commit()
+        flash("Quête créée.", "success")
+    return redirect(url_for("gestion_quetes"))
+
+
+@app.route("/admin/quetes/<int:quete_id>/modifier", methods=["POST"])
+@admin_requis
+def modifier_quete(quete_id):
+    db = get_db()
+    q = lire_quete_formulaire(db)
+    if q is not None:
+        db.execute(
+            """UPDATE quetes SET titre = ?, description = ?, icone = ?, type_objectif = ?, cible = ?,
+                      date_debut = ?, date_fin = ?, points_recompense = ?, type_recompense = ?,
+                      produit_id = ?, recompense_texte = ?, actif = ?
+               WHERE id = ?""",
+            (q["titre"], q["description"], q["icone"], q["type_objectif"], q["cible"], q["date_debut"],
+             q["date_fin"], q["points"], q["type_recompense"], q["produit_id"], q["texte"],
+             1 if request.form.get("actif") else 0, quete_id),
+        )
+        db.commit()
+        flash("Quête mise à jour.", "success")
+    return redirect(url_for("gestion_quetes"))
+
+
+@app.route("/admin/quetes/<int:quete_id>/supprimer", methods=["POST"])
+@admin_requis
+def supprimer_quete(quete_id):
+    db = get_db()
+    db.execute("DELETE FROM quetes WHERE id = ?", (quete_id,))
+    db.commit()
+    flash("Quête supprimée.", "warning")
+    return redirect(url_for("gestion_quetes"))
+
+
+# ----------------------------------------------------------------------
+# QUIZ DU ROI : une partie offerte à chaque achat « jeux »
+# ----------------------------------------------------------------------
+try:
+    QUIZ_QUESTIONS_PAR_PARTIE = max(1, int(os.environ.get("QUIZ_QUESTIONS_PAR_PARTIE_FIDELITE", "3")))
+except ValueError:
+    QUIZ_QUESTIONS_PAR_PARTIE = 3
+try:
+    QUIZ_BONUS_PARFAIT = max(0, int(os.environ.get("QUIZ_BONUS_PARFAIT_FIDELITE", "5")))
+except ValueError:
+    QUIZ_BONUS_PARFAIT = 5
+
+
+def quiz_disponibles(db, client_id):
+    ligne = db.execute(
+        """SELECT COUNT(*) AS n FROM historique_achats
+           WHERE client_id = ? AND usage_achat = 'jeux' AND quiz_utilise = 0 AND montant > 0 AND date_achat >= ?""",
+        (client_id, limite_validite_tirage()),
+    ).fetchone()
+    return ligne["n"]
+
+
+def consommer_ticket_quiz(db, client_id):
+    ligne = db.execute(
+        """UPDATE historique_achats SET quiz_utilise = 1
+           WHERE id = (SELECT id FROM historique_achats
+                       WHERE client_id = ? AND usage_achat = 'jeux' AND quiz_utilise = 0 AND montant > 0 AND date_achat >= ?
+                       ORDER BY id LIMIT 1)
+             AND quiz_utilise = 0
+           RETURNING id""",
+        (client_id, limite_validite_tirage()),
+    ).fetchone()
+    return ligne is not None
+
+
+def partie_en_cours(db, client_id):
+    return db.execute(
+        "SELECT * FROM quiz_parties WHERE client_id = ? AND statut = 'en_cours' ORDER BY id DESC LIMIT 1",
+        (client_id,),
+    ).fetchone()
+
+
+def _listes_partie(partie):
+    ids = [int(x) for x in partie["question_ids"].split(",") if x]
+    reponses = [int(x) for x in partie["reponses"].split(",") if x]
+    return ids, reponses
+
+
+def question_publique(question, position, total):
+    """La question telle que le client la voit (jamais la bonne réponse)."""
+    choix = [question[c] for c in ("choix1", "choix2", "choix3", "choix4") if question[c]]
+    return {"index": position, "total": total, "question": question["question"], "choix": choix}
+
+
+def prochaine_question(db, partie):
+    """(question, position, total) de la prochaine question, ou None si la partie est terminée.
+    Une question supprimée entre-temps par l'admin est simplement passée."""
+    ids, reponses = _listes_partie(partie)
+    position = len(reponses)
+    while position < len(ids):
+        question = db.execute("SELECT * FROM quiz_questions WHERE id = ?", (ids[position],)).fetchone()
+        if question is not None:
+            return question, position, len(ids)
+        reponses.append(0)
+        db.execute(
+            "UPDATE quiz_parties SET reponses = ? WHERE id = ?", (",".join(map(str, reponses)), partie["id"])
+        )
+        position += 1
+    return None
+
+
+def terminer_partie(db, partie, client_id):
+    ids, reponses = _listes_partie(partie)
+    score, points = 0, 0
+    for i, question_id in enumerate(ids):
+        question = db.execute("SELECT * FROM quiz_questions WHERE id = ?", (question_id,)).fetchone()
+        if question is not None and i < len(reponses) and reponses[i] == question["bonne"]:
+            score += 1
+            points += question["points"] or 0
+    total = len(ids)
+    parfait = total >= 2 and score == total
+    if parfait:
+        points += QUIZ_BONUS_PARFAIT
+    maintenant = datetime.now().strftime(FORMAT_DATE)
+    if points > 0:
+        db.execute(
+            "UPDATE clients_fidelite SET score_points = score_points + ?, date_derniere_modification = ? WHERE id = ?",
+            (points, maintenant, client_id),
+        )
+        notifier(db, client_id, f"🧠 Quiz du Roi : {score}/{total} bonnes réponses, +{points} points !")
+    db.execute(
+        "UPDATE quiz_parties SET statut = 'terminee', score = ?, points_gagnes = ?, date_fin = ? WHERE id = ?",
+        (score, points, maintenant, partie["id"]),
+    )
+    return {"score": score, "total": total, "points": points, "parfait": parfait}
+
+
+@app.route("/carte/<lien_unique>/quiz/commencer", methods=["POST"])
+def quiz_commencer(lien_unique):
+    db = get_db()
+    client = db.execute("SELECT * FROM clients_fidelite WHERE lien_unique = ?", (lien_unique,)).fetchone()
+    if client is None:
+        abort(404)
+
+    partie = partie_en_cours(db, client["id"])
+    if partie is None:
+        existantes = [q["id"] for q in db.execute("SELECT id FROM quiz_questions WHERE actif = 1").fetchall()]
+        if not existantes:
+            return jsonify(ok=False, message="Le quiz est en préparation, revenez bientôt !"), 503
+        if not consommer_ticket_quiz(db, client["id"]):
+            db.rollback()
+            return jsonify(ok=False, message="Aucune partie disponible : chaque achat « Jeux » vous offre une partie de quiz."), 409
+        recentes = set()
+        for ancienne in db.execute(
+            "SELECT question_ids FROM quiz_parties WHERE client_id = ? ORDER BY id DESC LIMIT 3", (client["id"],)
+        ).fetchall():
+            recentes.update(int(x) for x in ancienne["question_ids"].split(",") if x)
+        nombre = min(QUIZ_QUESTIONS_PAR_PARTIE, len(existantes))
+        pool = [i for i in existantes if i not in recentes]
+        if len(pool) < nombre:
+            pool = existantes
+        choisies = secrets.SystemRandom().sample(pool, nombre)
+        db.execute(
+            "INSERT INTO quiz_parties (client_id, question_ids, reponses, statut, date_debut) VALUES (?, ?, '', 'en_cours', ?)",
+            (client["id"], ",".join(map(str, choisies)), datetime.now().strftime(FORMAT_DATE)),
+        )
+        db.commit()
+        partie = partie_en_cours(db, client["id"])
+
+    etat = prochaine_question(db, partie)
+    if etat is None:
+        resultat = terminer_partie(db, partie, client["id"])
+        db.commit()
+        return jsonify(ok=True, termine=True, resultat=resultat, restants=quiz_disponibles(db, client["id"]))
+    db.commit()
+    question, position, total = etat
+    return jsonify(ok=True, termine=False, restants=quiz_disponibles(db, client["id"]),
+                   **question_publique(question, position, total))
+
+
+@app.route("/carte/<lien_unique>/quiz/repondre", methods=["POST"])
+def quiz_repondre(lien_unique):
+    db = get_db()
+    client = db.execute("SELECT * FROM clients_fidelite WHERE lien_unique = ?", (lien_unique,)).fetchone()
+    if client is None:
+        abort(404)
+    donnees = request.get_json(silent=True) or request.form
+    try:
+        choix = int(donnees.get("choix"))
+        index = int(donnees.get("index"))
+    except (TypeError, ValueError):
+        return jsonify(ok=False, message="Réponse invalide."), 400
+
+    partie = partie_en_cours(db, client["id"])
+    if partie is None:
+        return jsonify(ok=False, message="Aucune partie en cours. Lancez une nouvelle partie."), 409
+    etat = prochaine_question(db, partie)
+    if etat is None:
+        resultat = terminer_partie(db, partie, client["id"])
+        db.commit()
+        return jsonify(ok=True, termine=True, correct=False, resultat=resultat)
+    question, position, total = etat
+    if index != position:
+        return jsonify(ok=False, message="Cette question a déjà reçu une réponse."), 409
+    nombre_choix = len([c for c in ("choix1", "choix2", "choix3", "choix4") if question[c]])
+    if not 1 <= choix <= nombre_choix:
+        return jsonify(ok=False, message="Choix invalide."), 400
+
+    _, reponses = _listes_partie(partie)
+    reponses.append(choix)
+    mise_a_jour = db.execute(
+        "UPDATE quiz_parties SET reponses = ? WHERE id = ? AND reponses = ?",
+        (",".join(map(str, reponses)), partie["id"], partie["reponses"]),
+    )
+    if mise_a_jour.rowcount == 0:
+        db.rollback()
+        return jsonify(ok=False, message="Réponse déjà enregistrée."), 409
+
+    correct = (choix == question["bonne"])
+    reponse = {"ok": True, "correct": correct, "bonne": question["bonne"], "explication": question["explication"] or ""}
+
+    partie = partie_en_cours(db, client["id"])
+    suivante = prochaine_question(db, partie)
+    if suivante is None:
+        reponse["termine"] = True
+        reponse["resultat"] = terminer_partie(db, partie, client["id"])
+        reponse["solde"] = db.execute(
+            "SELECT score_points FROM clients_fidelite WHERE id = ?", (client["id"],)
+        ).fetchone()["score_points"]
+    else:
+        reponse["termine"] = False
+        reponse["prochaine"] = question_publique(*suivante)
+    db.commit()
+    reponse["restants"] = quiz_disponibles(db, client["id"])
+    return jsonify(**reponse)
+
+
+def lire_question_formulaire():
+    """Lit le formulaire d'une question de quiz : dict ou None si invalide."""
+    question = request.form.get("question", "").strip()[:200]
+    choix = [request.form.get(f"choix{i}", "").strip()[:100] for i in range(1, 5)]
+    if not question or not choix[0] or not choix[1]:
+        flash("Une question et au moins deux choix sont nécessaires.", "danger")
+        return None
+    if (choix[3] and not choix[2]):
+        flash("Remplissez le choix 3 avant le choix 4.", "danger")
+        return None
+    nombre = len([c for c in choix if c])
+    try:
+        bonne = int(request.form.get("bonne", "1"))
+        points = max(0, int(request.form.get("points", "5") or 0))
+    except ValueError:
+        flash("La bonne réponse et les points doivent être des nombres.", "danger")
+        return None
+    if not 1 <= bonne <= nombre:
+        flash("La bonne réponse doit correspondre à l'un des choix remplis.", "danger")
+        return None
+    return {
+        "question": question, "choix": [c or None for c in choix], "bonne": bonne,
+        "explication": request.form.get("explication", "").strip()[:300], "points": points,
+    }
+
+
+@app.route("/admin/quiz")
+@admin_requis
+def gestion_quiz():
+    db = get_db()
+    questions = db.execute("SELECT * FROM quiz_questions ORDER BY id").fetchall()
+    stats = db.execute(
+        """SELECT COUNT(*) AS parties, COALESCE(SUM(points_gagnes), 0) AS points
+           FROM quiz_parties WHERE statut = 'terminee' AND substr(date_fin, 1, 10) = ?""",
+        (datetime.now().strftime("%Y-%m-%d"),),
+    ).fetchone()
+    derniers = db.execute(
+        """SELECT quiz_parties.*, clients_fidelite.prenom, clients_fidelite.nom
+           FROM quiz_parties JOIN clients_fidelite ON clients_fidelite.id = quiz_parties.client_id
+           WHERE quiz_parties.statut = 'terminee' ORDER BY quiz_parties.id DESC LIMIT 20"""
+    ).fetchall()
+    return render_template(
+        "gestion_quiz.html", questions=questions, stats=stats, derniers=derniers,
+        par_partie=QUIZ_QUESTIONS_PAR_PARTIE, bonus=QUIZ_BONUS_PARFAIT, validite=TIRAGE_VALIDITE_JOURS,
+    )
+
+
+@app.route("/admin/quiz/ajouter", methods=["POST"])
+@admin_requis
+def ajouter_question_quiz():
+    db = get_db()
+    q = lire_question_formulaire()
+    if q is not None:
+        db.execute(
+            """INSERT INTO quiz_questions (question, choix1, choix2, choix3, choix4, bonne, explication, points, actif)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)""",
+            (q["question"], *q["choix"], q["bonne"], q["explication"], q["points"]),
+        )
+        db.commit()
+        flash("Question ajoutée au quiz.", "success")
+    return redirect(url_for("gestion_quiz"))
+
+
+@app.route("/admin/quiz/<int:question_id>/modifier", methods=["POST"])
+@admin_requis
+def modifier_question_quiz(question_id):
+    db = get_db()
+    q = lire_question_formulaire()
+    if q is not None:
+        db.execute(
+            """UPDATE quiz_questions SET question = ?, choix1 = ?, choix2 = ?, choix3 = ?, choix4 = ?,
+                      bonne = ?, explication = ?, points = ?, actif = ? WHERE id = ?""",
+            (q["question"], *q["choix"], q["bonne"], q["explication"], q["points"],
+             1 if request.form.get("actif") else 0, question_id),
+        )
+        db.commit()
+        flash("Question mise à jour.", "success")
+    return redirect(url_for("gestion_quiz"))
+
+
+@app.route("/admin/quiz/<int:question_id>/supprimer", methods=["POST"])
+@admin_requis
+def supprimer_question_quiz(question_id):
+    db = get_db()
+    db.execute("DELETE FROM quiz_questions WHERE id = ?", (question_id,))
+    db.commit()
+    flash("Question supprimée.", "warning")
+    return redirect(url_for("gestion_quiz"))
 
 
 # ----------------------------------------------------------------------
@@ -1282,8 +1786,22 @@ def carte_client(lien_unique):
     )
     lien_commande_roue = lien_whatsapp(WHATSAPP_SANDWICH_DU_ROI, texte_commande)
 
+    a_achete = client_a_achete(db, client)
+    nb_achats_jeux = db.execute(
+        "SELECT COUNT(*) AS n FROM historique_achats WHERE client_id = ? AND usage_achat = 'jeux'",
+        (client["id"],),
+    ).fetchone()["n"]
+    quetes_semaine = quetes_pour_client(db, client["id"])
+    quiz_dispo = quiz_disponibles(db, client["id"])
+    quiz_en_cours = partie_en_cours(db, client["id"]) is not None
+
     return render_template(
         "carte_client.html",
+        a_achete=a_achete,
+        nb_achats_jeux=nb_achats_jeux,
+        quetes_semaine=quetes_semaine,
+        quiz_dispo=quiz_dispo,
+        quiz_en_cours=quiz_en_cours,
         lien_commande_roue=lien_commande_roue,
         tirages_dispo=tirages_dispo,
         lots_visibles=lots_visibles,
@@ -1560,7 +2078,7 @@ def demarrer_mission(lien_unique, mission_id):
     if client is None:
         abort(404)
 
-    if client["nombre_achats"] < 1:
+    if not client_a_achete(db, client):
         flash("Les missions se débloquent après votre premier achat.", "warning")
         return redirect(url_for("carte_client", lien_unique=lien_unique))
 
@@ -1620,7 +2138,7 @@ def soumettre_mission(lien_unique, mission_id):
     if client is None:
         abort(404)
 
-    if client["nombre_achats"] < 1:
+    if not client_a_achete(db, client):
         flash("Les missions se débloquent après votre premier achat.", "warning")
         return redirect(url_for("carte_client", lien_unique=lien_unique))
 
@@ -1937,6 +2455,9 @@ def ajouter_achat(client_id):
 
     montant_brut = request.form.get("montant", "0")
     note = request.form.get("note", "").strip()
+    usage = request.form.get("usage_achat", "niveau")
+    if usage not in USAGES_ACHAT:
+        usage = "niveau"
 
     try:
         montant = float(montant_brut)
@@ -1952,12 +2473,13 @@ def ajouter_achat(client_id):
     ).fetchone()["derniere"]
 
     db.execute(
-        """INSERT INTO historique_achats (client_id, montant, points_ajoutes, note, tirage_utilise)
-           VALUES (?, ?, ?, ?, 0)""",
-        (client_id, montant, points_ajoutes, note),
+        """INSERT INTO historique_achats (client_id, montant, points_ajoutes, note, tirage_utilise, quiz_utilise, usage_achat)
+           VALUES (?, ?, ?, ?, 0, 0, ?)""",
+        (client_id, montant, points_ajoutes, note, usage),
     )
 
-    nouveau_nombre_achats = client["nombre_achats"] + 1
+    # Un achat « niveau » fait progresser le rang ; un achat « jeux » ne compte PAS pour le rang.
+    nouveau_nombre_achats = client["nombre_achats"] + (1 if usage == "niveau" else 0)
     nouveau_score = client["score_points"] + points_ajoutes
 
     db.execute(
@@ -1969,17 +2491,31 @@ def ajouter_achat(client_id):
     )
     db.commit()
 
-    maj_statut_client(db, client_id)
+    quetes_accomplies = []
+    if usage == "niveau":
+        maj_statut_client(db, client_id)
+    else:
+        quetes_accomplies = evaluer_quetes(db, client_id)
 
     client_a_jour = db.execute("SELECT * FROM clients_fidelite WHERE id = ?", (client_id,)).fetchone()
     verifier_missions_auto_retour(db, client_a_jour, date_achat_precedent)
     db.commit()
 
-    flash(
-        f"Achat enregistré : {points_ajoutes} point{'s' if points_ajoutes != 1 else ''} accordé"
-        f"{'s' if points_ajoutes != 1 else ''} automatiquement ({FCFA_PAR_POINT} FCFA = 1 point).",
-        "success",
-    )
+    pluriel = "s" if points_ajoutes != 1 else ""
+    if usage == "niveau":
+        flash(
+            f"Achat enregistré pour le NIVEAU : {points_ajoutes} point{pluriel} accordé{pluriel} "
+            f"({FCFA_PAR_POINT} FCFA = 1 point), case suivante cochée.",
+            "success",
+        )
+    else:
+        message = (
+            f"Achat enregistré pour les JEUX : {points_ajoutes} point{pluriel} accordé{pluriel}, "
+            "1 tour de roue et 1 partie de quiz offerts (le niveau ne bouge pas)."
+        )
+        if quetes_accomplies:
+            message += " Quête accomplie : " + ", ".join(quetes_accomplies) + " !"
+        flash(message, "success")
     return redirect(url_for("fiche_client", client_id=client_id))
 
 
