@@ -249,6 +249,24 @@ def creer_tables(conn):
         )
     """)
 
+    # --- Inscription par QR code, cadeau de bienvenue et parrainage ---
+    conn.execute("ALTER TABLE clients_fidelite ADD COLUMN IF NOT EXISTS code_parrainage TEXT")
+    conn.execute("ALTER TABLE clients_fidelite ADD COLUMN IF NOT EXISTS parraine_par INTEGER")
+    conn.execute("ALTER TABLE clients_fidelite ADD COLUMN IF NOT EXISTS parrainage_recompense INTEGER NOT NULL DEFAULT 0")
+    conn.execute("ALTER TABLE clients_fidelite ADD COLUMN IF NOT EXISTS source_inscription TEXT NOT NULL DEFAULT 'admin'")
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_clients_code_parrainage ON clients_fidelite (code_parrainage)")
+    # Jetons offerts (bienvenue, parrainage) : un tour de jeu qui ne dépend pas d'un achat
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS jetons_bonus (
+            id SERIAL PRIMARY KEY,
+            client_id INTEGER NOT NULL REFERENCES clients_fidelite (id) ON DELETE CASCADE,
+            jeu TEXT NOT NULL DEFAULT 'roue',
+            origine TEXT NOT NULL,
+            date_creation TEXT NOT NULL,
+            utilise INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+
     # Photos des clients et captures de preuve : stockées dans la base
     # (le disque de Render gratuit est effacé à chaque redémarrage).
     conn.execute("""

@@ -14,6 +14,7 @@ cette application doit être hébergée en ligne (ex. Render) — voir README.tx
 
 import json
 import math
+import time
 import os
 import re
 import unicodedata
@@ -832,7 +833,7 @@ def tirages_disponibles(db, client_id):
            WHERE client_id = ? AND usage_achat = 'jeux' AND tirage_utilise = 0 AND montant > 0 AND date_achat >= ?""",
         (client_id, limite_validite_tirage()),
     ).fetchone()
-    return ligne["n"]
+    return ligne["n"] + jetons_bonus_disponibles(db, client_id, "roue")
 
 
 def consommer_tirage(db, client_id):
@@ -846,7 +847,9 @@ def consommer_tirage(db, client_id):
            RETURNING id""",
         (client_id, limite_validite_tirage()),
     ).fetchone()
-    return ligne is not None
+    if ligne is not None:
+        return True
+    return consommer_jeton_bonus(db, client_id, "roue")
 
 
 def lots_tirables(db):
@@ -1558,6 +1561,226 @@ def supprimer_question_quiz(question_id):
 
 
 # ----------------------------------------------------------------------
+# INSCRIPTION PAR QR CODE, CADEAU DE BIENVENUE ET PARRAINAGE
+# ----------------------------------------------------------------------
+try:
+    BONUS_BIENVENUE_ROUE = max(0, int(os.environ.get("BONUS_BIENVENUE_ROUE_FIDELITE", "1")))
+except ValueError:
+    BONUS_BIENVENUE_ROUE = 1
+try:
+    PARRAINAGES_MAX_PAR_MOIS = max(0, int(os.environ.get("PARRAINAGES_MAX_PAR_MOIS_FIDELITE", "5")))
+except ValueError:
+    PARRAINAGES_MAX_PAR_MOIS = 5
+BONUS_VALIDITE_JOURS = 30
+LIMITE_INSCRIPTIONS_PAR_HEURE = 30
+LIEN_QR_INSCRIPTION = "https://fidelite-plus-app.onrender.com/inscription"  # adresse encodée dans static/images/qr-inscription.png
+_TENTATIVES_INSCRIPTION = {}
+
+
+def normaliser_numero(brut):
+    """Garde uniquement les chiffres (et retire un éventuel préfixe international « 00 »)."""
+    chiffres = re.sub(r"[^0-9]", "", brut or "")
+    return chiffres[2:] if chiffres.startswith("00") else chiffres
+
+
+def cle_numero(numero):
+    """Les 8 derniers chiffres : identiques pour 97000000, 0197000000 et 22997000000."""
+    return normaliser_numero(numero)[-8:]
+
+
+def numero_deja_inscrit(db, numero):
+    cle = cle_numero(numero)
+    for ligne in db.execute("SELECT numero FROM clients_fidelite WHERE numero IS NOT NULL AND numero <> ''").fetchall():
+        if cle_numero(ligne["numero"]) == cle:
+            return True
+    return False
+
+
+def generer_code_parrainage(db):
+    while True:
+        code = "".join(secrets.choice(CARACTERES_CODE_BON) for _ in range(6))
+        if not db.execute("SELECT 1 FROM clients_fidelite WHERE code_parrainage = ?", (code,)).fetchone():
+            return code
+
+
+def code_parrainage_client(db, client):
+    """Code de parrainage du client (créé à la première utilisation pour les anciennes cartes)."""
+    if client["code_parrainage"]:
+        return client["code_parrainage"]
+    code = generer_code_parrainage(db)
+    db.execute("UPDATE clients_fidelite SET code_parrainage = ? WHERE id = ?", (code, client["id"]))
+    db.commit()
+    return code
+
+
+def url_publique(chemin):
+    """Adresse complète du site (derrière le proxy de Render : https et bon nom de domaine)."""
+    protocole = request.headers.get("X-Forwarded-Proto", request.scheme).split(",")[0].strip()
+    hote = request.headers.get("X-Forwarded-Host", request.host).split(",")[0].strip()
+    return f"{protocole}://{hote}{chemin}"
+
+
+def limite_validite_bonus():
+    return (datetime.now() - timedelta(days=BONUS_VALIDITE_JOURS)).strftime(FORMAT_DATE)
+
+
+def donner_jeton_bonus(db, client_id, jeu, origine):
+    db.execute(
+        "INSERT INTO jetons_bonus (client_id, jeu, origine, date_creation, utilise) VALUES (?, ?, ?, ?, 0)",
+        (client_id, jeu, origine, datetime.now().strftime(FORMAT_DATE)),
+    )
+
+
+def jetons_bonus_disponibles(db, client_id, jeu):
+    return db.execute(
+        "SELECT COUNT(*) AS n FROM jetons_bonus WHERE client_id = ? AND jeu = ? AND utilise = 0 AND date_creation >= ?",
+        (client_id, jeu, limite_validite_bonus()),
+    ).fetchone()["n"]
+
+
+def consommer_jeton_bonus(db, client_id, jeu):
+    ligne = db.execute(
+        """UPDATE jetons_bonus SET utilise = 1
+           WHERE id = (SELECT id FROM jetons_bonus
+                       WHERE client_id = ? AND jeu = ? AND utilise = 0 AND date_creation >= ?
+                       ORDER BY id LIMIT 1)
+             AND utilise = 0
+           RETURNING id""",
+        (client_id, jeu, limite_validite_bonus()),
+    ).fetchone()
+    return ligne is not None
+
+
+def accueillir_nouveau_client(db, client_id):
+    """Cadeau de bienvenue : un ou plusieurs tours de roue offerts à la création de la carte."""
+    if BONUS_BIENVENUE_ROUE <= 0:
+        return
+    for _ in range(BONUS_BIENVENUE_ROUE):
+        donner_jeton_bonus(db, client_id, "roue", "bienvenue")
+    notifier(db, client_id, "🎁 Bienvenue chez Sandwich du Roi ! Un tour de roue vous attend dans l'onglet 🎯 Missions.")
+
+
+def verifier_parrainage(db, client, montant):
+    """Au premier achat d'un client parrainé : un tour de roue pour lui et pour son parrain (plafond mensuel).
+    Le « premier achat » est le premier achat avec un montant (un achat à 0 FCFA ne compte pas)."""
+    if montant <= 0 or not client["parraine_par"] or client["parrainage_recompense"]:
+        return None
+    achats_payants = db.execute(
+        "SELECT COUNT(*) AS n FROM historique_achats WHERE client_id = ? AND montant > 0", (client["id"],)
+    ).fetchone()["n"]
+    if achats_payants != 1:      # l'achat qui vient d'être enregistré doit être le seul
+        return None
+    db.execute("UPDATE clients_fidelite SET parrainage_recompense = 1 WHERE id = ?", (client["id"],))
+    donner_jeton_bonus(db, client["id"], "roue", "parrainage")
+    notifier(db, client["id"], "🎁 Merci pour votre premier achat ! Un tour de roue vous est offert grâce à votre parrain.")
+
+    parrain = db.execute("SELECT * FROM clients_fidelite WHERE id = ?", (client["parraine_par"],)).fetchone()
+    if parrain is None:
+        return f"Parrainage validé : un tour de roue offert à {client['prenom']}."
+    depuis = (datetime.now() - timedelta(days=30)).strftime(FORMAT_DATE)
+    deja = db.execute(
+        "SELECT COUNT(*) AS n FROM jetons_bonus WHERE client_id = ? AND origine = 'parrainage' AND date_creation >= ?",
+        (parrain["id"], depuis),
+    ).fetchone()["n"]
+    if deja >= PARRAINAGES_MAX_PAR_MOIS:
+        return (f"Parrainage validé : un tour de roue offert à {client['prenom']}. "
+                f"Son parrain {parrain['prenom']} a atteint la limite de {PARRAINAGES_MAX_PAR_MOIS} parrainages ce mois-ci.")
+    donner_jeton_bonus(db, parrain["id"], "roue", "parrainage")
+    notifier(db, parrain["id"], f"🎉 {client['prenom']} a fait son premier achat grâce à vous : un tour de roue vous est offert !")
+    return f"Parrainage validé : un tour de roue offert à {client['prenom']} et à son parrain {parrain['prenom']}."
+
+
+def ip_visiteur():
+    return (request.headers.get("X-Forwarded-For", request.remote_addr or "") or "").split(",")[0].strip()
+
+
+def trop_de_tentatives(ip):
+    maintenant = time.time()
+    recentes = [t for t in _TENTATIVES_INSCRIPTION.get(ip, []) if maintenant - t < 3600]
+    _TENTATIVES_INSCRIPTION[ip] = recentes
+    if len(recentes) >= LIMITE_INSCRIPTIONS_PAR_HEURE:
+        return True
+    recentes.append(maintenant)
+    return False
+
+
+@app.route("/inscription", methods=["GET", "POST"])
+def inscription():
+    """Page publique d'inscription (QR code ou lien d'un parrain) : crée la carte et l'ouvre."""
+    db = get_db()
+    code_ref = (request.values.get("ref") or "").strip().upper()[:12]
+    parrain = None
+    if code_ref:
+        parrain = db.execute("SELECT * FROM clients_fidelite WHERE code_parrainage = ?", (code_ref,)).fetchone()
+    erreur, valeurs = None, {}
+
+    if request.method == "POST":
+        if request.form.get("site_web"):          # champ piège invisible : seuls les robots le remplissent
+            return redirect(url_for("inscription"))
+        valeurs = {
+            "prenom": request.form.get("prenom", "").strip()[:40],
+            "nom": request.form.get("nom", "").strip()[:40],
+            "numero": request.form.get("numero", "").strip()[:20],
+            "lieu": request.form.get("lieu", "").strip()[:80],
+        }
+        numero = normaliser_numero(valeurs["numero"])
+        if trop_de_tentatives(ip_visiteur()):
+            erreur = "Trop de tentatives depuis cette connexion. Réessayez dans une heure ou passez en boutique."
+        elif not valeurs["prenom"]:
+            erreur = "Merci d'indiquer votre prénom."
+        elif not 8 <= len(numero) <= 15:
+            erreur = "Merci d'indiquer un numéro WhatsApp valide (8 chiffres ou plus)."
+        elif numero_deja_inscrit(db, numero):
+            erreur = ("Cette inscription n'a pas pu être finalisée. Si vous avez déjà une carte, "
+                      "demandez votre lien personnel à la boutique.")
+        else:
+            nom = valeurs["nom"] or valeurs["prenom"]
+            lien_unique = generer_lien_unique(db, nom, valeurs["prenom"])
+            nouveau_id = db.execute(
+                """INSERT INTO clients_fidelite
+                   (lien_unique, nom, prenom, numero, lieu_livraison, nombre_achats, score_points, statut_actuel,
+                    code_parrainage, parraine_par, source_inscription)
+                   VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?, ?, ?)
+                   RETURNING id""",
+                (lien_unique, nom, valeurs["prenom"], numero, valeurs["lieu"] or None, calculer_statut(db, 0),
+                 generer_code_parrainage(db), parrain["id"] if parrain else None,
+                 "parrainage" if parrain else "qr"),
+            ).fetchone()["id"]
+            accueillir_nouveau_client(db, nouveau_id)
+            if parrain:
+                notifier(db, parrain["id"], f"👥 {valeurs['prenom']} a rejoint FIDÉLITÉ+ grâce à vous ! "
+                                             "Un tour de roue vous sera offert à son premier achat.")
+            db.commit()
+            return redirect(url_for("carte_client", lien_unique=lien_unique, bienvenue=1))
+
+    return render_template(
+        "inscription.html", erreur=erreur, valeurs=valeurs, parrain=parrain, code_ref=code_ref,
+        bonus=BONUS_BIENVENUE_ROUE,
+        lien_boutique=lien_whatsapp(WHATSAPP_SANDWICH_DU_ROI, "Bonjour Sandwich du Roi 👑, j'aimerais récupérer le lien de ma carte FIDÉLITÉ+."),
+    )
+
+
+@app.route("/admin/inscription")
+@admin_requis
+def admin_inscription():
+    db = get_db()
+    par_source = {l["source_inscription"]: l["n"] for l in db.execute(
+        "SELECT source_inscription, COUNT(*) AS n FROM clients_fidelite GROUP BY source_inscription").fetchall()}
+    parraines = db.execute("SELECT COUNT(*) AS n FROM clients_fidelite WHERE parraine_par IS NOT NULL").fetchone()["n"]
+    recompenses = db.execute("SELECT COUNT(*) AS n FROM clients_fidelite WHERE parrainage_recompense = 1").fetchone()["n"]
+    meilleurs = db.execute(
+        """SELECT p.prenom, p.nom, COUNT(*) AS n
+           FROM clients_fidelite f JOIN clients_fidelite p ON p.id = f.parraine_par
+           GROUP BY p.id, p.prenom, p.nom ORDER BY n DESC LIMIT 5"""
+    ).fetchall()
+    return render_template(
+        "admin_inscription.html", lien=url_publique(url_for("inscription")), lien_qr=LIEN_QR_INSCRIPTION,
+        par_source=par_source, parraines=parraines, recompenses=recompenses, meilleurs=meilleurs,
+        bonus=BONUS_BIENVENUE_ROUE, max_mois=PARRAINAGES_MAX_PAR_MOIS,
+    )
+
+
+# ----------------------------------------------------------------------
 # INSTALLATION SUR LE TÉLÉPHONE (application web installable / PWA)
 # ----------------------------------------------------------------------
 
@@ -1786,6 +2009,22 @@ def carte_client(lien_unique):
     )
     lien_commande_roue = lien_whatsapp(WHATSAPP_SANDWICH_DU_ROI, texte_commande)
 
+    code_parrainage = code_parrainage_client(db, client)
+    lien_parrainage = url_publique(url_for("inscription", ref=code_parrainage))
+    from urllib.parse import quote
+    texte_invitation = (
+        "Salut ! J'ai la carte de fidélité FIDÉLITÉ+ de Sandwich du Roi 👑 et je t'invite à la rejoindre : "
+        f"un tour de roue est offert dès l'inscription. Inscris-toi ici : {lien_parrainage}"
+    )
+    lien_invitation_whatsapp = "https://wa.me/?text=" + quote(texte_invitation)
+    nb_filleuls = db.execute(
+        "SELECT COUNT(*) AS n FROM clients_fidelite WHERE parraine_par = ?", (client["id"],)
+    ).fetchone()["n"]
+    nb_filleuls_actifs = db.execute(
+        "SELECT COUNT(*) AS n FROM clients_fidelite WHERE parraine_par = ? AND parrainage_recompense = 1",
+        (client["id"],),
+    ).fetchone()["n"]
+
     a_achete = client_a_achete(db, client)
     nb_achats_jeux = db.execute(
         "SELECT COUNT(*) AS n FROM historique_achats WHERE client_id = ? AND usage_achat = 'jeux'",
@@ -1797,6 +2036,12 @@ def carte_client(lien_unique):
 
     return render_template(
         "carte_client.html",
+        bienvenue=(request.args.get("bienvenue") == "1"),
+        lien_parrainage=lien_parrainage,
+        lien_invitation_whatsapp=lien_invitation_whatsapp,
+        nb_filleuls=nb_filleuls,
+        nb_filleuls_actifs=nb_filleuls_actifs,
+        parrainages_max=PARRAINAGES_MAX_PAR_MOIS,
         a_achete=a_achete,
         nb_achats_jeux=nb_achats_jeux,
         quetes_semaine=quetes_semaine,
@@ -2302,12 +2547,15 @@ def ajouter_client():
     lien_unique = generer_lien_unique(db, nom, prenom)
     statut_initial = calculer_statut(db, 0)
 
-    db.execute(
+    nouveau_id = db.execute(
         """INSERT INTO clients_fidelite
-           (lien_unique, nom, prenom, numero, age, nombre_achats, score_points, statut_actuel)
-           VALUES (?, ?, ?, ?, ?, 0, 0, ?)""",
-        (lien_unique, nom, prenom, numero, age, statut_initial),
-    )
+           (lien_unique, nom, prenom, numero, age, nombre_achats, score_points, statut_actuel,
+            code_parrainage, source_inscription)
+           VALUES (?, ?, ?, ?, ?, 0, 0, ?, ?, 'admin')
+           RETURNING id""",
+        (lien_unique, nom, prenom, numero, age, statut_initial, generer_code_parrainage(db)),
+    ).fetchone()["id"]
+    accueillir_nouveau_client(db, nouveau_id)
     db.commit()
     flash(f"Client créé. Lien individuel : /carte/{lien_unique}", "success")
     return redirect(url_for("admin_dashboard"))
@@ -2329,6 +2577,15 @@ def fiche_client(client_id):
     ).fetchall()
     niveaux = get_niveaux_actifs(db)
     niveau_effectif, niveau_acquis, jours_inactivite, statut_degrade, alerte_preventive = get_statut_effectif(db, client)
+
+    parrain = None
+    if client["parraine_par"]:
+        parrain = db.execute(
+            "SELECT prenom, nom FROM clients_fidelite WHERE id = ?", (client["parraine_par"],)
+        ).fetchone()
+    nb_filleuls = db.execute(
+        "SELECT COUNT(*) AS n FROM clients_fidelite WHERE parraine_par = ?", (client_id,)
+    ).fetchone()["n"]
 
     profil = profil_client(db, client)
     segments_client = [
@@ -2356,6 +2613,7 @@ def fiche_client(client_id):
         niveau_effectif=niveau_effectif, niveau_acquis=niveau_acquis,
         jours_inactivite=jours_inactivite, statut_degrade=statut_degrade,
         alerte_preventive=alerte_preventive,
+        parrain=parrain, nb_filleuls=nb_filleuls,
         profil=profil, segments_client=segments_client, segments=SEGMENTS_CLIENTS,
         missions_perso=missions_perso, missions_assignables=missions_assignables,
         missions_realisees=missions_realisees, objectifs=OBJECTIFS_COMMERCIAUX,
@@ -2491,6 +2749,8 @@ def ajouter_achat(client_id):
     )
     db.commit()
 
+    message_parrainage = verifier_parrainage(db, client, montant)
+
     quetes_accomplies = []
     if usage == "niveau":
         maj_statut_client(db, client_id)
@@ -2516,6 +2776,8 @@ def ajouter_achat(client_id):
         if quetes_accomplies:
             message += " Quête accomplie : " + ", ".join(quetes_accomplies) + " !"
         flash(message, "success")
+    if message_parrainage:
+        flash(message_parrainage, "success")
     return redirect(url_for("fiche_client", client_id=client_id))
 
 
