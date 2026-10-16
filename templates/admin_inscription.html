@@ -1,0 +1,61 @@
+{% extends "_base.html" %}
+{% block titre %}Inscription QR et parrainage{% endblock %}
+{% block contenu %}
+<style>
+.affiche { max-width: 420px; margin: 0 auto 1rem; background: #fff; border: 3px solid #8B0000; border-radius: 16px; padding: 1.2rem; text-align: center; }
+.affiche h2 { margin: 0; color: #8B0000; font-size: 1.5rem; }
+.affiche p { margin: 0.4rem 0; }
+.affiche img { width: 100%; max-width: 320px; height: auto; image-rendering: pixelated; }
+.affiche .cadeau { background: #8B0000; color: #FFE082; border-radius: 10px; padding: 0.5rem; font-weight: 700; }
+.stats-grille { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.6rem; margin: 0.8rem 0; }
+.stat-case { background: #fff; border: 1px solid #ead9a3; border-radius: 12px; padding: 0.7rem; text-align: center; }
+.stat-case strong { display: block; font-size: 1.5rem; color: #8B0000; }
+@media print {
+    body * { visibility: hidden; }
+    .affiche, .affiche * { visibility: visible; }
+    .affiche { position: absolute; left: 0; top: 0; width: 100%; border: 3px solid #000; }
+}
+</style>
+<a href="{{ url_for('admin_dashboard') }}" class="lien-retour no-print">&larr; Retour au tableau de bord</a>
+<h1 class="no-print">📲 Inscription par QR code et parrainage</h1>
+
+<div class="affiche">
+    <h2>👑 Rejoignez FIDÉLITÉ+</h2>
+    <p><strong>Sandwich du Roi</strong></p>
+    <p>Scannez ce code pour créer votre carte de fidélité</p>
+    <img src="{{ url_for('static', filename='images/qr-inscription.png') }}" alt="QR code d'inscription">
+    {% if bonus > 0 %}<p class="cadeau">🎁 {{ bonus }} tour{{ 's' if bonus != 1 else '' }} de roue offert{{ 's' if bonus != 1 else '' }} dès l'inscription !</p>{% endif %}
+    <p style="font-size:0.8rem;">{{ lien_qr }}</p>
+</div>
+
+<p class="no-print" style="text-align:center;"><button type="button" class="bouton bouton-principal" onclick="window.print()">🖨️ Imprimer l'affiche</button></p>
+
+{% if lien != lien_qr %}
+<p class="texte-aide no-print">⚠️ Le QR code pointe vers <strong>{{ lien_qr }}</strong>, alors que vous êtes sur <strong>{{ lien }}</strong>. S'il s'agit d'un nouveau nom de domaine, demandez un nouveau QR code.</p>
+{% endif %}
+
+<section class="carte-formulaire no-print">
+    <h2>Lien d'inscription à partager</h2>
+    <input type="text" readonly value="{{ lien }}" onclick="this.select()" style="width:100%;box-sizing:border-box;padding:0.7rem;">
+    <p class="texte-aide">Placez le QR code au comptoir, sur les emballages et les sacs. Vous pouvez aussi envoyer ce lien par WhatsApp ou le publier sur vos réseaux.</p>
+</section>
+
+<section class="carte-formulaire no-print">
+    <h2>Résultats</h2>
+    <div class="stats-grille">
+        <div class="stat-case"><strong>{{ par_source.get('qr', 0) }}</strong>inscrits par QR code</div>
+        <div class="stat-case"><strong>{{ par_source.get('parrainage', 0) }}</strong>inscrits par parrainage</div>
+        <div class="stat-case"><strong>{{ par_source.get('admin', 0) }}</strong>créés en boutique</div>
+        <div class="stat-case"><strong>{{ recompenses }} / {{ parraines }}</strong>parrainés ayant déjà acheté</div>
+    </div>
+    {% if meilleurs %}
+    <p class="texte-aide"><strong>🏆 Meilleurs parrains :</strong>
+        {% for m in meilleurs %}{{ m.prenom }} {{ m.nom }} ({{ m.n }}){% if not loop.last %}, {% endif %}{% endfor %}
+    </p>
+    {% endif %}
+    <p class="texte-aide">
+        Cadeau de bienvenue : {{ bonus }} tour{{ 's' if bonus != 1 else '' }} de roue. Parrainage : un tour de roue pour le parrain et le filleul au premier achat du filleul, dans la limite de {{ max_mois }} parrainages récompensés par mois et par parrain.
+        Pour changer ces valeurs, modifiez les variables <code>BONUS_BIENVENUE_ROUE_FIDELITE</code> et <code>PARRAINAGES_MAX_PAR_MOIS_FIDELITE</code> dans Render.
+    </p>
+</section>
+{% endblock %}

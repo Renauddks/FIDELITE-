@@ -23,6 +23,12 @@
         · ✅ {{ missions_realisees }} mission{{ 's' if missions_realisees != 1 else '' }} réalisée{{ 's' if missions_realisees != 1 else '' }}
         {% if profil.achats_manquants is not none %}· 🚀 {{ profil.achats_manquants }} achat{{ 's' if profil.achats_manquants != 1 else '' }} avant le niveau suivant{% endif %}
     </p>
+    {% if parrain or nb_filleuls %}
+    <p class="fiche-meta">
+        {% if parrain %}👥 Parrainé par {{ parrain.prenom }} {{ parrain.nom }}{% if client.parrainage_recompense %} · ✅ parrainage récompensé{% endif %}{% endif %}
+        {% if nb_filleuls %}{% if parrain %} · {% endif %}👥 A parrainé {{ nb_filleuls }} ami{{ 's' if nb_filleuls != 1 else '' }}{% endif %}
+    </p>
+    {% endif %}
     <p class="fiche-meta">
         🧭 Profil :
         {% for cle in segments_client %}<span class="badge-statut">{{ segments[cle].nom }}</span> {% else %}<span class="texte-aide">aucun profil particulier pour l'instant</span>{% endfor %}

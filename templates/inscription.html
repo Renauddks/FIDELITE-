@@ -1,0 +1,52 @@
+{% extends "_base.html" %}
+{% block titre %}Rejoindre FIDÉLITÉ+{% endblock %}
+{% block contenu %}
+<style>
+.insc { max-width: 460px; margin: 0 auto; }
+.insc-carte { background: #fff; border: 2px solid #D4AF37; border-radius: 16px; padding: 1.1rem; box-shadow: 0 4px 14px rgba(0,0,0,0.12); }
+.insc-titre { margin: 0 0 0.3rem; text-align: center; color: #8B0000; font-size: 1.4rem; font-weight: 800; }
+.insc-cadeau { background: linear-gradient(160deg, #3a0000, #8B0000); color: #FFE082; border-radius: 12px; padding: 0.7rem 0.9rem; text-align: center; font-weight: 700; margin: 0.7rem 0; }
+.insc-parrain { background: #efe3ff; color: #3b2a8c; border-radius: 12px; padding: 0.6rem 0.9rem; text-align: center; font-weight: 700; margin: 0.7rem 0; }
+.insc label { display: block; margin: 0.7rem 0 0.2rem; font-weight: 700; font-size: 0.9rem; color: #3a0000; }
+.insc input[type=text], .insc input[type=tel] { width: 100%; box-sizing: border-box; padding: 0.75rem; border: 2px solid #e2d7b8; border-radius: 10px; font-size: 1rem; }
+.insc input:focus { outline: none; border-color: #8B0000; }
+.insc-erreur { background: #fdecea; color: #8a1c14; border-radius: 10px; padding: 0.7rem 0.9rem; margin: 0.7rem 0; font-weight: 600; }
+.insc-bouton { width: 100%; margin-top: 1rem; padding: 0.9rem; border: 0; border-radius: 12px; background: linear-gradient(180deg, #a40000, #6b0000); color: #fff; font-size: 1.1rem; font-weight: 800; cursor: pointer; }
+.insc-aide { margin: 0.9rem 0 0; font-size: 0.82rem; text-align: center; color: #666; }
+.insc-aide a { color: #8B0000; font-weight: 700; }
+.insc-piege { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+</style>
+<div class="insc">
+    <div class="insc-carte">
+        <p class="insc-titre">👑 Rejoignez FIDÉLITÉ+</p>
+        <p style="text-align:center;margin:0;">La carte de fidélité de Sandwich du Roi : niveaux, jeux, quêtes et récompenses.</p>
+        {% if bonus > 0 %}
+        <div class="insc-cadeau">🎁 {{ bonus }} tour{{ 's' if bonus != 1 else '' }} de roue offert{{ 's' if bonus != 1 else '' }} dès l'inscription !</div>
+        {% endif %}
+        {% if parrain %}
+        <div class="insc-parrain">👥 Vous êtes invité(e) par {{ parrain.prenom }}</div>
+        {% endif %}
+        {% if erreur %}<div class="insc-erreur">{{ erreur }}</div>{% endif %}
+
+        <form method="POST" action="{{ url_for('inscription') }}" autocomplete="on">
+            <input type="hidden" name="ref" value="{{ code_ref }}">
+            <div class="insc-piege" aria-hidden="true">
+                <label>Ne pas remplir ce champ <input type="text" name="site_web" tabindex="-1" autocomplete="off"></label>
+            </div>
+            <label for="prenom">Prénom *</label>
+            <input type="text" id="prenom" name="prenom" maxlength="40" value="{{ valeurs.get('prenom', '') }}" required autocomplete="given-name">
+            <label for="nom">Nom (facultatif)</label>
+            <input type="text" id="nom" name="nom" maxlength="40" value="{{ valeurs.get('nom', '') }}" autocomplete="family-name">
+            <label for="numero">Numéro WhatsApp *</label>
+            <input type="tel" id="numero" name="numero" maxlength="20" inputmode="tel" value="{{ valeurs.get('numero', '') }}" placeholder="Ex : 0197000000" required autocomplete="tel">
+            <label for="lieu">Quartier / lieu de livraison (facultatif)</label>
+            <input type="text" id="lieu" name="lieu" maxlength="80" value="{{ valeurs.get('lieu', '') }}">
+            <button type="submit" class="insc-bouton">🎉 Créer ma carte</button>
+        </form>
+        <p class="insc-aide">Votre carte sera accessible uniquement par votre lien personnel : gardez-le précieusement.</p>
+        {% if lien_boutique %}
+        <p class="insc-aide">Vous avez déjà une carte ? <a href="{{ lien_boutique }}" target="_blank" rel="noopener">Demandez votre lien à la boutique</a></p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

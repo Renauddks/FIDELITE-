@@ -281,8 +281,30 @@
 .quiz-fin-icone { font-size: 2.4rem; display: block; }
 .quiz-fin-titre { display: block; font-size: 1.15rem; margin: 0.2rem 0; }
 .quiz-fin-message { margin: 0 0 0.7rem; font-size: 0.9rem; }
+
+/* --- Bienvenue et parrainage --- */
+.bienvenue-bloc { background: linear-gradient(160deg, #3a0000, #8B0000); color: #fff; border: 2px solid #FFD54F; border-radius: 16px; padding: 1rem; margin-bottom: 1rem; text-align: center; animation: tirage-respire 2.4s ease-in-out infinite; }
+.bienvenue-bloc[hidden] { display: none; }
+.bienvenue-bloc .bouton { background: linear-gradient(180deg, #FFE082, #D4AF37); color: #3a0000; border: 2px solid #FFF3C4; font-weight: 800; }
+.bienvenue-bloc .bouton-lien { color: #FFE082; }
+.bienvenue-titre { margin: 0 0 0.3rem; font-size: 1.25rem; font-weight: 800; color: #FFE082; }
+.bienvenue-texte { margin: 0 0 0.5rem; font-size: 0.92rem; }
+.bienvenue-alerte { margin: 0 0 0.7rem; font-size: 0.85rem; background: rgba(255,255,255,0.14); border-radius: 10px; padding: 0.5rem 0.7rem; }
+.parrainage-bloc { background: #fffaf0; border: 2px solid #D4AF37; border-radius: 16px; padding: 0.9rem; margin-bottom: 1rem; }
 @media (prefers-reduced-motion: reduce) { .tirage-royal * { animation: none !important; } }
 </style>
+
+{% if bienvenue %}
+<div class="bienvenue-bloc" id="bienvenue-bloc">
+    <p class="bienvenue-titre">🎉 Bienvenue {{ client.prenom }} !</p>
+    <p class="bienvenue-texte">Votre carte FIDÉLITÉ+ est créée. 🎁 Un <strong>tour de roue</strong> vous attend dans l'onglet 🎯 Missions.</p>
+    <p class="bienvenue-alerte">📌 Cette page est votre carte personnelle : gardez-la ! Installez l'application ci-dessous ou copiez votre lien.</p>
+    <div class="installer-actions">
+        <button type="button" id="bienvenue-copier" class="bouton bouton-principal">📋 Copier mon lien</button>
+        <button type="button" id="bienvenue-fermer" class="bouton-lien">Fermer</button>
+    </div>
+</div>
+{% endif %}
 
 <!-- Installation de l'application sur le téléphone -->
 <div id="bloc-installer" class="bloc-installer" hidden>
@@ -694,6 +716,13 @@
 
 <!-- VUE : PARTAGER -->
 <div id="vue-partage" class="vue-section vue-cachee">
+    <div class="parrainage-bloc">
+        <p class="titre-section">👥 Parrainez un ami</p>
+        <p class="texte-aide">Invitez un ami : dès son premier achat, <strong>vous gagnez tous les deux un tour de roue</strong> 🎡 (jusqu'à {{ parrainages_max }} amis récompensés par mois).</p>
+        <a href="{{ lien_invitation_whatsapp }}" target="_blank" rel="noopener" class="tirage-commander">💬 Inviter un ami sur WhatsApp</a>
+        <button type="button" id="parrainage-copier" class="bouton bouton-secondaire" data-lien="{{ lien_parrainage }}" style="margin-top:0.5rem;width:100%;">📋 Copier mon lien d'invitation</button>
+        <p class="texte-aide" style="margin-top:0.6rem;">Mes amis parrainés : <strong>{{ nb_filleuls }}</strong> · ayant déjà commandé : <strong>{{ nb_filleuls_actifs }}</strong></p>
+    </div>
     <div class="carte-fidelite-partage {% if not peut_partager %}partage-verrouille{% endif %}">
         <p class="titre-section">🤝 Partager mes points avec un autre client</p>
         {% if peut_partager %}
@@ -1129,6 +1158,33 @@ function ouvrirNiveau(titre, avantages) {
         window.location.hash = 'missions';
         window.location.reload();
     });
+})();
+
+(function () {
+    function copier(texte, bouton, libelleOk) {
+        var ancien = bouton.textContent;
+        function ok() { bouton.textContent = libelleOk; setTimeout(function () { bouton.textContent = ancien; }, 2500); }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(texte).then(ok, function () { window.prompt('Copiez ce lien :', texte); });
+        } else {
+            window.prompt('Copiez ce lien :', texte);
+        }
+    }
+    var bienvenueCopier = document.getElementById('bienvenue-copier');
+    if (bienvenueCopier) {
+        bienvenueCopier.addEventListener('click', function () {
+            copier(window.location.origin + window.location.pathname, bienvenueCopier, '✅ Lien copié');
+        });
+        document.getElementById('bienvenue-fermer').addEventListener('click', function () {
+            document.getElementById('bienvenue-bloc').hidden = true;
+        });
+    }
+    var parrainageCopier = document.getElementById('parrainage-copier');
+    if (parrainageCopier) {
+        parrainageCopier.addEventListener('click', function () {
+            copier(parrainageCopier.getAttribute('data-lien'), parrainageCopier, '✅ Lien copié');
+        });
+    }
 })();
 
 function changerVue(vue) {
